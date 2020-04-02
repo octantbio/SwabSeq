@@ -46,23 +46,29 @@ Let’s plot this out across the range of RNA copies we added in:
 The data are less noisy than run01. Are we getting signal from S2 assay
 at 3 copies?? This is unreal.
 
+Let’s look at raw reads to see clearly where we’re getting none:
+
+![](Figs/unnamed-chunk-10-1.png)<!-- -->
+
+We get some number of reads for nCoV in every well.
+
 We still have the technical spike oligo issue, so let’s plot the spike
 reads across conditions to try to get a sense of where they are showing
 up:
 
-![](Figs/unnamed-chunk-10-1.png)<!-- -->
+![](Figs/unnamed-chunk-11-1.png)<!-- -->
 
 Clearly it’s not showing up in S2, which makes sense since the spike
 doesn’t have priming sites for those primers. Let’s drill down on N1 and
 look at proportions:
 
-![](Figs/unnamed-chunk-11-1.png)<!-- -->
+![](Figs/unnamed-chunk-12-1.png)<!-- -->
 
 Ratio is 1 between 2e3 and 6e3, agreeing with run01. Still our best
 estimate for the level of contamination.
 
 Now, let’s look at SARS reads across Twist RNA amounts, across our i5s:
 
-![](Figs/unnamed-chunk-12-1.png)<!-- -->
+![](Figs/unnamed-chunk-13-1.png)<!-- -->
 
 Some i5s look better than others. Need to think more about this.
