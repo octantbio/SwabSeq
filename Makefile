@@ -10,7 +10,7 @@ RUNS := $(shell find data -maxdepth 1 -mindepth 1 -type d -exec basename {} \;)
 #===============================================================================
 # RECIPIES
 
-all: star conds
+all: conds star
 conds: $(addprefix pipeline/, $(addsuffix /conditions.csv, $(RUNS)))
 star: $(addprefix pipeline/, $(addsuffix /starcode.csv, $(RUNS)))
 signif: $(addprefix results/, $(addsuffix /signif.tsv.gz, $(RUNS)))
