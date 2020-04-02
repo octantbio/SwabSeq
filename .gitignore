@@ -1,0 +1,20 @@
+# Vim stuff
+*.sw[mnop]
+
+# RStudio stuff
+.Rproj.user
+.rstudio
+
+# Data, pipeline, and results are too big, and don't want to accidentally add
+data/*
+pipeline/*
+results/*
+
+# Core dumps (I think this is what this is)
+core
+
+# Only track R/RMarkdown files in the analyses folder
+# Update: now track EVERYTHING in analyses folder EXCEPT html files
+#analyses/*/**
+#!analyses/*/*.R*
+analyses/*/*.html

@@ -1,0 +1,361 @@
+---
+title: "SARS-CoV-2 platform run 1 analysis"
+output: github_document
+---
+
+```{r imports}
+# plotting
+library(paletteer)
+library(ggbeeswarm) # <- geom_quasirandom
+library(ggridges) # <- geom_density_ridges
+
+# tidyverse
+library(broom)
+library(furrr) # <- parallel map (future_map, plan) (devtools for walk)
+library(readxl) # <- read_xlsx
+library(magrittr)
+library(tidyverse)
+
+# workaround to enable multicore with new rstudio versions
+options(future.fork.enable = TRUE)
+plan(multicore)
+set.seed(42)
+
+# remap select to dplyr::select, as it can clash with MASS::select
+select=dplyr::select
+
+setwd('/home/rstudio')
+```
+
+```{r}
+setwd('/home/rstudio')
+
+# process input
+# args -> df, sample_sheet, barcode_map, chem_list, gpcr_list
+guess_max <- 100000
+args <- commandArgs(trailingOnly = TRUE)
+
+reads <-   read_csv('platform/pipeline/200330_M05737_0143_000000000-CD7YK/starcode.csv')
+cond <-    read_csv('platform/pipeline/200330_M05737_0143_000000000-CD7YK/conditions.csv', guess_max=guess_max) %>% 
+  select(-cell_library, -bc_promoter, -chem_ID, -molarity)
+bc.map <-  read_xlsx('platform/pipeline/200330_M05737_0143_000000000-CD7YK/bc-map.xlsx', sheet='assay_seqs', guess_max=guess_max) %>% 
+  mutate(sequence=substr(toupper(sequence), 1, 15))
+
+out.dir <- 'platform/results/200330_M05737_0143_000000000-CD7YK/'
+if (!dir.exists(out.dir)){ dir.create(out.dir) }
+experiment <- basename(out.dir)
+```
+
+```{r}
+# ------------------------------------------------------------------------------------
+# add explicit zeros to the data
+
+explicit.zeros <- function(df, bc.map) {
+  # take only assays and targets from the current run
+  # assumes df has been joined with condition sheet
+  bc.map %>%
+    filter(
+      assay %in% unique(df$assay),
+    ) %>%
+    left_join(df, by = c('sequence', 'assay')) %>%
+    replace_na(list(Count = 0))
+}
+
+# select the variables in the barcode map that vary
+# (and any additional info you want to include)
+bc.map.var <- bc.map %>%
+  select('sequence', 'target', 'assay')
+
+# drop the centroid column as it's not needed
+# coerce Count to integer to avoid weird scientic notation behavior in format_csv
+df <- reads %>%
+  select(-Centroid) %>%
+  rename(sequence=barcode) %>% 
+  inner_join(select(cond, Sample_ID, assay), by = 'Sample_ID') %>% 
+  group_by(Sample_ID) %>%
+  group_nest() %>%
+  mutate(foo = future_map(data, ~explicit.zeros(.x, bc.map.var))) %>%
+  select(-data) %>%
+  unnest(foo) %>%
+  inner_join(cond) %>%
+  mutate(Count = as.integer(Count))
+
+# write out raw data
+df %>% 
+  write_csv('annotated_df.csv')
+```
+
+```{r}
+# ===============================================================================
+#                              PLOTS
+# ===============================================================================
+
+theme_pub <- function(base_size = 11, base_family = "") {
+  # based on https://github.com/noamross/noamtools/blob/master/R/theme_nr.R
+  # start with theme_bw and modify from there!
+  theme_bw(base_size = base_size, base_family = base_family) +# %+replace%
+    theme(
+      # grid lines
+      panel.grid.major.x = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.y = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.background   = element_blank(),
+
+      # axis options
+      axis.ticks.y   = element_blank(),
+      axis.title.x   = element_text(size=rel(2), vjust=0.25),
+      axis.title.y   = element_text(size=rel(2), vjust=0.35),
+      axis.text      = element_text(color="black", size=rel(1)),
+
+      # legend options
+      legend.title    = element_text(size=rel(1.5)),
+      legend.key      = element_rect(fill="white"),
+      legend.key.size = unit(1, "cm"),
+      legend.text     = element_text(size=rel(1.5)),
+
+      # facet options
+      strip.text = element_text(size=rel(2)),
+      strip.background = element_blank(),
+
+      # title options
+      plot.title = element_text(size=rel(2.25), vjust=0.25, hjust=0.5)
+    )
+}
+theme_set(theme_pub())
+```
+
+As a zero order; let's look at plate setup
+```{r, fig.width=12, fig.height=7}
+df %>%
+    mutate(
+        Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+        Col = str_sub(Sample_Well, 2)
+    ) %>%
+    ggplot(aes(x=Col, y=Row, fill=log10(Twist_RNA_copies))) +
+    geom_raster() +
+    facet_wrap(~paste(Sample_Plate, assay, sep = ' - ')) +
+    scale_fill_paletteer_c('viridis::plasma') +
+    coord_equal()
+
+```
+Let's first just look at reads per well across our plates:
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+    count(Sample_Plate, Sample_Well, assay, wt=Count, name='well_total') %>%
+    mutate(
+        Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+        Col = str_sub(Sample_Well, 2)
+    ) %>%
+    ggplot(aes(x=Col, y=Row, fill=log10(well_total))) +
+    geom_raster() +
+    facet_wrap(~paste(Sample_Plate, assay, sep = ' - ')) +
+    scale_fill_paletteer_c('viridis::plasma') +
+    coord_equal()
+```
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  count(Sample_Well, wt=Count, name='well_total') %>% 
+  right_join(df) %>% 
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(
+      Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+      Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(RPP30))) +
+    geom_raster() +
+    facet_wrap(~paste(Sample_Plate, assay, sep = ' - ')) +
+    scale_fill_paletteer_c('viridis::plasma') +
+    coord_equal()
+```
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  count(Sample_Well, wt=Count, name='well_total') %>% 
+  right_join(df) %>% 
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(
+      Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+      Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(`SARS-CoV-2`))) +
+    geom_raster() +
+    facet_wrap(~paste(Sample_Plate, assay, sep = ' - ')) +
+    scale_fill_paletteer_c('viridis::plasma') +
+    coord_equal()
+```
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  count(Sample_Well, wt=Count, name='well_total') %>% 
+  right_join(df) %>% 
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(prop_SARS=(`SARS-CoV-2`+0.1)/well_total) %>% 
+  mutate(
+      Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+      Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(prop_SARS))) +
+    geom_raster() +
+    facet_wrap(~paste(Sample_Plate, assay, sep = ' - ')) +
+    scale_fill_paletteer_c('viridis::plasma') +
+    coord_equal()
+```
+
+
+```{r, fig.width=16, fig.height=6}
+df %>%
+  count(Sample_Well, wt=Count, name='well_total') %>% 
+  right_join(df) %>% 
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(Twist_RNA_copies=as.character(Twist_RNA_copies),
+         Twist_RNA_copies=factor(Twist_RNA_copies, levels=c('0','1','3','10','30','100','1000','3000','10000','30000','100000'))) %>% 
+
+  ggplot(aes(x=RPP30, y=`SARS-CoV-2`, color=Twist_RNA_copies)) +
+    geom_point(outlier.shape=NA) +
+    scale_y_log10() + scale_x_log10() + scale_color_brewer(palette="BrBG")
+    facet_wrap(~paste(assay, sep = ' - '))
+```
+
+
+Sri Playing around. Checking out Counts for all three against one another.
+
+```{r, fig.width=24, fig.height=6}
+df %>%
+  count(Sample_Well, wt=Count, name='well_total') %>% 
+  right_join(df) %>%
+  mutate(Twist_RNA_copies=as.character(Twist_RNA_copies),
+         Twist_RNA_copies=factor(Twist_RNA_copies, levels=c('0','1','3','10','30','100','1000','3000','10000','30000','100000'))) %>% 
+
+  ggplot(aes(x=Twist_RNA_copies, y=Count, fill=target)) +
+    geom_boxplot(outlier.shape=NA) +
+    scale_y_log10() +
+    facet_wrap(~paste(assay, sep = ' - '))
+
+```
+
+
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  count(Sample_Well, wt=Count, name='well_total') %>% 
+  right_join(df) %>% 
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(SARS_to_RPP30=`SARS-CoV-2`/RPP30, 
+         Twist_RNA_copies=as.character(Twist_RNA_copies),
+         Twist_RNA_copies=factor(Twist_RNA_copies, levels=c('0','1','3','10','30','100','1000','3000',
+                                                            '10000','30000','100000'))) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=SARS_to_RPP30, group=Twist_RNA_copies)) +
+    geom_boxplot(outlier.shape=NA) +
+    geom_quasirandom(alpha=0.1) +
+    scale_y_log10() +
+    facet_wrap(~paste(assay, sep = ' - '))
+```
+
+Let's plot the spike reads across conditions to try to get a sense of where they are showing up:
+
+```{r, fig.width=12, fig.height=7}
+# plot spike reads for each condition
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(Twist_RNA_copies=as.character(Twist_RNA_copies),
+         Twist_RNA_copies=factor(Twist_RNA_copies, levels=c('0','1','3','10','30','100','1000','3000',
+                                                            '10000','30000','1e+05'))) %>% 
+  mutate(spike=spike+0.1) %>% 
+  rename(spike_reads=spike) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=spike_reads, group=Twist_RNA_copies)) +
+    geom_boxplot(outlier.shape=NA) +
+    geom_quasirandom(alpha=0.1) +
+    scale_y_log10(breaks=c(0.1,1,10,100,1000,10000), labels=c('ND','1e0','1e1','1e2','1e3','1e4')) +
+    facet_wrap(~paste(assay, sep = ' - '))
+```
+
+Clearly it's not showing up in S2, which makes sense since the spike doesn't have priming sites for those primers. Let's drill down on N1 and look at proportions:
+
+```{r, fig.width=12, fig.height=7}
+# plot spike reads for each condition
+df %>%
+  count(Sample_Well, wt=Count, name='well_total') %>% 
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(Twist_RNA_copies=as.character(Twist_RNA_copies),
+         Twist_RNA_copies=factor(Twist_RNA_copies, levels=c('0','1','3','10','30','100','1000','3000',
+                                                            '10000','30000','1e+05'))) %>% 
+  mutate(spike_to_total=(spike+0.1)/well_total) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=spike_to_total, group=Twist_RNA_copies)) +
+    geom_boxplot(outlier.shape=NA) +
+    geom_quasirandom(alpha=0.1) +
+    scale_y_log10(breaks=c(0.1,1,10,100,1000,10000), labels=c('ND','1e0','1e1','1e2','1e3','1e4')) +
+    facet_wrap(~paste(assay, sep = ' - '))
+```
+
+```{r, fig.width=16, fig.height=7}
+# plot Twist reads for each condition across i5s to look for instances of contamination
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(
+        Row = factor(str_sub(Sample_Well, 1, 1), levels = LETTERS[1:16]),
+        Col = str_sub(Sample_Well, 2)
+    ) %>%
+  mutate(Twist_RNA_copies=as.character(Twist_RNA_copies),
+         Twist_RNA_copies=factor(Twist_RNA_copies, levels=c('0','1','3','10','30','100','1000','3000',
+                                                            '10000','30000','1e+05'))) %>%
+  mutate(index2=factor(index2, levels=c('AAGATCTG', 'GCGCAACT', 'TGTAACAG', 'TGTCATGA',
+                                        'ATGCCCTC', 'GCAAGATT', 'GTAATCTG', 'CTCAGATG'))) %>% 
+  mutate(`SARS-CoV-2`=`SARS-CoV-2`+0.1) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=`SARS-CoV-2`, group=Twist_RNA_copies)) +
+    geom_boxplot(outlier.shape=NA) +
+    geom_quasirandom(aes(color=Row), alpha=0.2) +
+    scale_y_log10(breaks=c(0.1,1,10,100,1000,10000), labels=c('ND','1e0','1e1','1e2','1e3','1e4')) +
+    facet_grid(assay~index2) + 
+    theme(axis.text.x = element_text(angle = 90, vjust=0.3))
+```
+
+Does seem like we get more nCoV reads in 0 condition when the i5 has high template samples, but it's not that big of an effect. The high amount of contamination in the rightmost indexes for each assay are surprising. Let's put those on a plate map:
+
+```{r, fig.width=12, fig.height=5}
+# look at 0 template wells across plate and see where contaminated ones fall
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(`SARS-CoV-2`=if_else(!(index2 %in% c('TGTCATGA', 'CTCAGATG')), as.integer(NA), `SARS-CoV-2`)) %>%
+  # mutate(`SARS-CoV-2`=`SARS-CoV-2`+0.1) %>% 
+  mutate(
+      Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+      Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(`SARS-CoV-2`))) +
+    geom_raster() +
+    facet_wrap(~paste(Sample_Plate, assay, sep = ' - ')) +
+    scale_fill_paletteer_c('viridis::plasma')
+```
+
+Seems like this is mostly happening in row 1 (not sure why it is worse in the S2 plate). This is where we have the highest amount of Twist RNA being put in with the D300, as shown in this plate map:
+
+```{r, fig.width=12, fig.height=5}
+# look at 0 template wells across plate and see where contaminated ones fall
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  # mutate(`SARS-CoV-2`=if_else(index2!='TGTCATGA', as.integer(NA), `SARS-CoV-2`)) %>%
+  # mutate(`SARS-CoV-2`=`SARS-CoV-2`+0.1) %>% 
+  mutate(
+      Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+      Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(Twist_RNA_copies))) +
+    geom_raster() +
+    facet_wrap(~paste(Sample_Plate, assay, sep = ' - ')) +
+    scale_fill_paletteer_c('viridis::plasma')
+```
+
+Based on these last few plots, we'll use pipettors and the liquidator to set up the next run. We're concerned about the D300 possibly dispensing into the wrong wells.
