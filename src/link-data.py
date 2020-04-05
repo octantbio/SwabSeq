@@ -1,34 +1,34 @@
-import os
-import glob
+import re
 import argparse
+from pathlib import Path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create symlinks to all fastq\'s in a sequencing directory. Just specify where the sequencing run is located relative to the current directory and we\'ll handle the rest!')
+        description='Create a folder with symlinks to all fastq\'s and a SampleSheet.csv in a sequencing directory. Note the name of the new folder will be the same as the input.')
     parser.add_argument('in_dir',
                         type=str,
                         help='path to sequencing run (or stdin if none)')
+    parser.add_argument('-o', '--out-dir',
+                        dest='out_dir',
+                        type=str,
+                        help='where to drop the folder of symlinks (default = current directory)',
+                        default=''
+                        )
     args = parser.parse_args()
 
-    # dump links in to a fold with the run id
-    in_dir = args.in_dir.rstrip('/')
-    out_dir = './' + in_dir.split('/')[-1]
-    if not os.path.isdir(out_dir):
-        os.mkdir(out_dir)
+    # dump links in to a folder with the run id
+    in_dir = Path(args.in_dir)
+    out_dir = Path(args.out_dir) / in_dir.name
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # prepend extra '../' to relative paths
-    fastqs = glob.iglob(in_dir + '/Data/Intensities/BaseCalls/*.fastq*')
-    if in_dir[:2] == '..':
-        sample_sheet = '../' + in_dir + '/SampleSheet.csv'
-        if os.path.exists(sample_sheet):
-            os.symlink(sample_sheet, out_dir + '/SampleSheet.csv')
-        for file in fastqs:
-            fastq_name = file.split('/')[-1]
-            os.symlink('../' + file, out_dir + '/' + fastq_name)
-    else:
-        sample_sheet = in_dir + '/SampleSheet.csv'
-        if os.path.exists(sample_sheet):
-            os.symlink(sample_sheet, out_dir + '/SampleSheet.csv')
-        for file in fastqs:
-            fastq_name = file.split('/')[-1]
-            os.symlink(file, out_dir + '/' + fastq_name)
+    # grab the samplesheet
+    path_to_samplesheet = in_dir.joinpath('SampleSheet.csv').resolve()
+    out_dir.joinpath('SampleSheet.csv').symlink_to(path_to_samplesheet)
+
+    # grab the fastqs
+    fastqs = in_dir.glob('Data/Intensities/BaseCalls/*.fastq*')
+    for fq in fastqs:
+        out_name = Path(fq).name
+        if 'Undetermined' not in out_name:
+            out_dir.joinpath(out_name).symlink_to(fq.resolve())
+
