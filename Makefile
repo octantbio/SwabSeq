@@ -23,7 +23,17 @@ deep_clean:
 .SECONDARY:
 
 #===============================================================================
-# Run starcode on each fastq, using gnu parallel to parse the SampleSheet.csv
+# PIPELINE
+
+# grab relevant section of samplesheet (make sure to catch windows return)
+pipeline/%/conditions.csv: data/%/SampleSheet.csv pipeline/%/bc-map.csv
+	@echo "Parsing $<"
+	@python src/strip-windows.py $< \
+		| awk '/Sample_ID/{seen=1} seen{print}' \
+		| Rscript src/bc-lengths.R $(word 2, $^) $@ \
+		2> $(@:.csv=.err)
+
+# Run starcode on each fastq, using gnu parallel to parse the conditions for barcode length
 pipeline/%/starcode.csv: data/% pipeline/%/conditions.csv
 	@echo "Counting BCs for all fastq's in $<"
 	@parallel --header : --colsep "," \
@@ -36,18 +46,4 @@ pipeline/%/starcode.csv: data/% pipeline/%/conditions.csv
 	&& echo "Sample_ID,Centroid,Count,barcode" \
 	| cat - $(@:.csv=.tmp) > $@ \
 	&& rm $(@:.csv=.tmp)
-
-# grab relevant section of samplesheet (make sure to catch windows return)
-pipeline/%/conditions.csv: data/%/SampleSheet.csv pipeline/%/bc-map.csv
-	@echo "Parsing $<"
-	@python src/strip-windows.py $< \
-		| awk '/Sample_ID/{seen=1} seen{print}' \
-		| Rscript src/bc-lengths.R $(word 2, $^) $@ \
-		2> $(@:.csv=.err)
-
-# copy barcode map from data/ folder.
-pipeline/%/bc-map.csv:
-	@echo "Grabbing $@"
-	@mkdir -p $(dir $@)
-	@cp data/barcode-map.csv $@
 
