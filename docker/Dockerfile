@@ -84,10 +84,7 @@ RUN conda update -y conda \
     scikit-learn \
     ipython \
     jupyterlab \
-    pip \
-    pyjanitor
-
-RUN pip install pygsheets
+    openpyxl
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # other utils
