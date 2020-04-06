@@ -215,8 +215,12 @@ if __name__ == '__main__':
 
     sample_header, rc = prompt_header()
 
-    # reverse compliment index2 if using on NextSeq
-    out_df.index2 = out_df.index2.map(rev_comp)
+    # reverse complement index1 - always reads the RC of the primer sequence
+    out_df['index'] = out_df['index'].map(rev_comp)
+
+    # reverse complement index2 if using on NextSeq (MiSeq reads the primer sequence)
+    if rc:
+        out_df.index2 = out_df.index2.map(rev_comp)
 
     # print header
     print(sample_header, file=args.out_file)
