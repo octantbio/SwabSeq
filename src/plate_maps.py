@@ -7,34 +7,10 @@ from collections import defaultdict
 from math import sqrt
 import string
 
-# Suite of functions for new plate maps
-# (no, I'm not going to make a class, unless it seems VERY beneficial)
-def extract_plate_map_constants(plate_maps, exclude = ['Dummy']):
-    
-    # First, find plates that have only constant values for each variable
-    constant_vars = set()
-    for var_name, plates in plate_maps.items():
-        if not var_name in exclude:
-            if set(len(set(val)) for val in plates.values()) == {1}:
-                constant_vars.add(var_name)
-    
-    # Extract the values into a table
-    plate_maps_slim = deepcopy(plate_maps)
-    constants_list = []
-    for var_name in constant_vars:
-        var_plates = plate_maps_slim.pop(var_name)
-        constants_series = pd.Series(
-            {key:list(set(val))[0] for key,val in var_plates.items()}
-        )
-        constants_series.name = var_name
-        constants_series.index.name = 'Plate'
-        constants_list.append(constants_series)
-        
-    constants_df = pd.DataFrame(constants_list).T
-    constants_df = constants_df.reindex(sorted(constants_df.columns), axis=1)
-    
-    return plate_maps_slim, constants_df
+from openpyxl import load_workbook
+from xlrd import XLRDError
 
+# Suite of functions for new plate maps
 def add_plate_map_constants(plate_maps, constants_df):
     
     plate_maps_full = defaultdict(dict, deepcopy(plate_maps))
@@ -62,38 +38,6 @@ def add_plate_map_constants(plate_maps, constants_df):
             
     return dict(plate_maps_full)
 
-def compress_plate_ids(plate_ids):
-    plate_numbers = [int(x.replace('Plate', '')) for x in plate_ids]
-    plate_numbers.sort()
-    range_min = [str(plate_numbers[0])]
-    range_max = [str(plate_numbers[0])]
-    j = 0
-    for i in range(1, len(plate_numbers)):
-        if plate_numbers[i] - plate_numbers[i-1] == 1:
-            range_max[j] = str(plate_numbers[i])
-        else:
-            j += 1
-            range_min.append(str(plate_numbers[i]))
-            range_max.append(str(plate_numbers[i]))
-    return 'Plate' + ','.join(f'{x}' if x==y else f'{x}-{y}' for x,y in zip(range_min, range_max))
-    
-
-def compress_plate_maps(plate_maps, exclude=['Dummy']):
-    
-    plate_maps_compressed = defaultdict(dict)
-    for var_name, plates in plate_maps.items():
-        if var_name in exclude:
-            plate_maps_compressed[var_name] = plate_maps[var_name]
-        else:
-            plates_to_compress = defaultdict(list)
-            for plate_id, val in plates.items():
-                plates_to_compress[tuple(val)].append(plate_id)
-            for uniq_vals, plate_list in plates_to_compress.items():
-                plate_str = compress_plate_ids(plate_list)
-                plate_maps_compressed[var_name][plate_str] = list(uniq_vals)
-            
-    return dict(plate_maps_compressed)
-
 def expand_plate_maps(plate_maps):
     plate_maps_expanded = defaultdict(dict)
     for var, plate_dict in plate_maps.items():
@@ -103,18 +47,46 @@ def expand_plate_maps(plate_maps):
                 plate_maps_expanded[var][enum_plate] = val
     return dict(plate_maps_expanded)
 
+def get_stripped_values(sheet):
+    # Get the values as a list of tuples
+    vals = list(sheet.values)
+
+    # Determine last row
+    nrows = len(vals)
+    for i in range(nrows-1, 0, -1):
+        if all(x is None for x in vals[i]):
+            nrows = i
+        else:
+            break
+
+    # Strip off extra rows
+    vals = vals[:nrows]
+
+    # Determine last column
+    ncols = len(vals[0])
+    for i in range(ncols-1, 0, -1):
+        if all(x is None for x in [vals[j][i] for j in range(nrows)]):
+            ncols = i
+        else:
+            break
+
+    # Strip off extra columns
+    vals = [row[:ncols] for row in vals]
+
+    return vals
+
 def read_plate_map_sheets(sheets):
     # This needs to error out in an informative way - I had a tab named "test"
     # with nothing in the right format and the error was not intuitive.
     plate_maps = {}
     #var_names = set()
     #plate_ids = set()
-    for sheet in sheets.worksheets():
+    for sheet in sheets.worksheets:
         var_name = sheet.title
         #var_names.add(var_name)
         if not var_name.startswith('_'):
-            strip = sheet.get_all_values(include_tailing_empty = False, include_tailing_empty_rows = False)
-            plates = [list(x[1]) for x in itertools.groupby(strip, lambda line: line == []) if not x[0]]
+            strip = get_stripped_values(sheet)
+            plates = [list(x[1]) for x in itertools.groupby(strip, lambda line: all(y is None for y in line)) if not x[0]]
             try:
                 plate_by_var = split_plate(plates)
             except ValueError as e:
@@ -123,7 +95,9 @@ def read_plate_map_sheets(sheets):
     
     return plate_maps
 
-def read_plate_maps(sheets):
+def read_plate_maps(fname):
+
+    sheets = load_workbook(fname, data_only = True)
     
     # Read in the sheet-formatted maps and expand them
     plate_maps = read_plate_map_sheets(sheets)
@@ -133,105 +107,17 @@ def read_plate_maps(sheets):
     check_plates_x_vars(plate_maps)
     
     # Read in constants and add them into the full-format plate map
-    constants_df = get_constants_tab(sheets)
+    constants_df = get_constants_tab(fname)
     plate_maps = add_plate_map_constants(plate_maps, constants_df)
     
     return plate_maps
-
-def write_plate_maps(sheets, plate_maps):
     
-    plate_maps, constants_df = extract_plate_map_constants(plate_maps)
-    plate_maps = compress_plate_maps(plate_maps)
-    
-    # Write the constants table back out
-    write_constants_tab(sheets, constants_df)
-    
-    # Then totally rewrite the variable sheets
-    # (DIFFERENT from original strategy to plop the variables into
-    # existing plate maps)
-    write_plate_map_sheets(sheets, plate_maps)
-    
-    # Try to read in the plate maps again to check for bad formatting
-    try:
-        read_plate_maps(sheets)
-    except BaseException as e:
-        raise RuntimeError(f'The exported plate maps are not formatted correctly (see message below):\n\n{e}')
-    
-def write_plate_map_sheets(sheets, plate_maps):
-    
-    existing_sheets = [x.title for x in sheets.worksheets()]
-    
-    for var_name, plate in plate_maps.items():
-        try:
-            sheet = sheets.worksheet_by_title(var_name)
-        except pygsheets.WorksheetNotFound as e:
-            sheet = sheets.add_worksheet(var_name, rows = 1000)
-        
-        sheet.clear()
-            
-        row = 1
-        col = 1
-        
-        for plate_id, vals in plate.items():
-            row, col = write_one_plate(sheet, vals, plate_id, (row, col))
-        
-    
-def write_one_plate(sheet, vals, plate_id, position):
-    """
-    Write one plate of values from the plate maps to a given upper-left,
-    1-indexed position tuple in an existing sheet.
-    """
-    
-    # Set up the data
-    nrow = nrow_pl(len(vals))
-    ncol = ncol_pl(len(vals))
-    rows = [[x] for x in row_letters(len(vals))]
-    cols = [list(range(1, ncol+1))]
-    val_mat = [vals[i:i+ncol] for i in range(0, len(vals), ncol)]
-    
-    # Make sure the plate is big enough
-    if sheet.rows < position[0] + nrow + 1:
-        sheet.add_rows(1000)
-    
-    # Write out!
-    sheet.cell(position).set_text_format('bold', True).value = plate_id
-    sheet.update_values(crange=(position[0], position[1]+1),
-                       values = cols)
-    sheet.update_values(crange=(position[0]+1, position[1]),
-                       values = rows)
-    sheet.update_values(crange=(position[0]+1, position[1]+1),
-                       values=val_mat)
-    
-    # Return new starting position
-    return position[0] + nrow + 2, position[1]
-    
-
-def write_constants_tab(sheets, constants_df):
+def get_constants_tab(fname):
     # Get the tab
     try:
-        constants_sheet = sheets.worksheet_by_title('_constants')
-    except pygsheets.WorksheetNotFound as e:
-        constants_sheet = sheets.add_worksheet('_constants')
-    constants_sheet.clear()
-    constants_sheet.set_dataframe(constants_df, (1,1), copy_index=True)
-    constants_sheet.cell((1,1)).value = constants_df.index.name
-    for i in range(constants_df.shape[1]+1):
-        constants_sheet.cell((1,i+1)).set_text_format('bold', True)
-    
-    # Remove sheets whose variables are now encoded in the
-    # constants tab
-    sheet_names = [sheet.title for sheet in sheets.worksheets()]
-    for var_name in constants_df.columns:
-        if var_name in sheet_names:
-            sheets.del_worksheet(sheets.worksheet_by_title(var_name))
-    
-def get_constants_tab(sheets):
-    # Get the tab
-    try:
-        constants_sheet = sheets.worksheet_by_title('_constants')
-    except pygsheets.WorksheetNotFound as e:
+        constants_df = pd.read_excel(fname, sheet_name = '_constants')
+    except XLRDError as e:
         raise RuntimeError('A sheet named "_constants" must be specified in the workbook.')
-    constants_df = constants_sheet.get_as_df()
     
     # Ensure it has a column named "Plate"
     if not 'Plate' in constants_df:
@@ -329,10 +215,20 @@ def plate_maps_to_df(plate_maps):
     check_plates_x_vars(plate_maps)
     
     plate_maps = add_plate_wells(plate_maps)
+
+    # Temporarily rename "index" column
+    rename_index = False
+    if 'index' in plate_maps:
+        rename_index = True
+        plate_maps['__index__'] = deepcopy(plate_maps['index'])
+        del plate_maps['index']
     
     df = pd.concat([pd.DataFrame(x).reset_index().melt(id_vars = 'index', var_name = "Plate_ID", value_name = var_name).set_index(['index', 'Plate_ID']) for var_name, x in plate_maps.items()], axis=1, sort=True)
     
     df = df.reset_index().drop('index', axis=1).assign(foo = lambda df: df['Plate_ID'].map(lambda x: int(x.replace('Plate', '')))).sort_values(['foo', 'Sample_Well']).reset_index(drop=True).drop('foo', axis = 1)
+
+    if rename_index:
+        df.rename({'__index__':'index'}, axis = 'columns', inplace = True)
     
     return(df)
 
