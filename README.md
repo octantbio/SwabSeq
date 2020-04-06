@@ -30,8 +30,10 @@ Please feel free to open an issue or pull request.
 
 ## License
 
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details. Additional licensing information:
+This code contained in this repository is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details. Additional licensing information:
 
 - [starcode](docker/starcode-license) - GPL-3.0
+
+The associated lab protocols etc. found on our [Notion Page](https://www.notion.so/Octant-COVID-Scaling-9eb80e793d7e46348038aa80a5a901fd) are provided under the [Open Covid Pledge License](https://www.notion.so/Octant-COVID-License-816b04b442674433a2a58bff2d8288df).
 
 ## Acknowledgments

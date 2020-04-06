@@ -12,6 +12,8 @@ Nate
     Spike-in’s](#expression-relative-to-spike-ins)
       - [Tidying](#tidying)
       - [Detection Plots](#detection-plots)
+  - [General Classifier](#general-classifier)
+      - [HEK293 Lysate Classification](#hek293-lysate-classification)
 
 # Setup
 
@@ -21,11 +23,17 @@ Import and load everything
 # plotting
 library(ggbeeswarm) # <- geom_quasirandom
 
+# stats
+library(MASS) # <- glm.nb
+library(speedglm)
+
 # tidyverse
 library(furrr) # <- parallel map (future_map, plan) (devtools for walk)
 library(readxl) # <- read_xlsx
 library(magrittr)
 library(tidyverse)
+
+select = dplyr::select #, MASS::select masks dplyr...
 
 # ------------------------------------------------------------------------------------
 # style plots
@@ -178,7 +186,7 @@ counts %>%
   scale_fill_viridis_c(option = 'plasma')
 ```
 
-![](figs/unnamed-chunk-3-1.png)<!-- -->
+![](figs/read-per-well-1.png)<!-- -->
 
 We can see a bifurcation in total reads between the top and bottom halfs
 of the plate. If we go back to our `cond` dataframe (which recall has
@@ -198,7 +206,7 @@ well.total %>%
   facet_wrap(~Sample_Plate)
 ```
 
-![](figs/unnamed-chunk-4-1.png)<!-- -->
+![](figs/expr-layout-1.png)<!-- -->
 
 we can see that the difference in reads comes from the sample prep -
 lysate from either nasopharyngeal (NP) swabs or HEK293 (NA are no HEK293
@@ -265,7 +273,7 @@ df %>%
   scale_fill_viridis_c(option = 'plasma')
 ```
 
-![](figs/unnamed-chunk-6-1.png)<!-- -->
+![](figs/crossover-1.png)<!-- -->
 
 We can see that although there is some cross-over present, it is to a
 very limited extent\!
@@ -291,7 +299,7 @@ df %>%
   scale_fill_viridis_c()
 ```
 
-![](figs/unnamed-chunk-7-1.png)<!-- -->
+![](figs/untidy-copies-1.png)<!-- -->
 
 From this we can make a key. We’ll also make a normalization data frame
 so we can normalize relative to the proper control
@@ -341,7 +349,9 @@ df.tidy <- tmp %>%
   gather(Expr, copies, Twist_RNA_copies:ATCC_Virus) %>%
   mutate(Expr = str_remove(Expr, '_copies')) %>%
   inner_join(expr)  %>%
-  bind_rows(no.rna.control)
+  bind_rows(no.rna.control) %>%
+  # clean up the control wells
+  mutate(lysate = if_else(is.na(lysate), 'Control', lysate))
 ```
 
 Let’s plot the new dataframe to make sure everything is tidied properly
@@ -355,47 +365,272 @@ df.tidy %>%
   scale_fill_viridis_c()
 ```
 
-![](figs/unnamed-chunk-9-1.png)<!-- -->
+![](figs/tidy-copies-1.png)<!-- -->
+
+### Null Distribution
+
+From the above plot, we can actually see that we have a large number of
+control wells that we can pull from. Since these wells lack any
+exogenous RNA-spikes, we can pool them together. We must take into
+acount what lysate the orginated from, however.
+
+``` r
+df.tidy %>%
+  filter(copies == 0) %>%
+  ggplot(aes(x=Col, y=Row, fill=lysate)) +
+  geom_raster() +
+  coord_equal() +
+  facet_wrap(~Sample_Plate)
+```
+
+![](figs/null-placement-1.png)<!-- -->
+
+Let’s add the nulls to each of the different experiments
+
+``` r
+nulls <- df.tidy %>%
+  filter(copies == 0) %>%
+  select(-Expr) %>%
+  nest(null.df = c(-assay, -lysate))
+
+
+df.tidy.nulls <- df.tidy %>%
+    filter(copies != 0) %>%
+    nest(data = c(-assay, -lysate, -Expr)) %>%
+    inner_join(nulls) %>%
+    mutate(combo = map2(data, null.df, bind_rows)) %>%
+    select(-data, -null.df) %>%
+    unnest(combo)
+```
 
 ## Detection Plots
 
-Let’s norm COVID to spike and plot it out across the range of RNA copies
-we added in:
+How can we tell if our method is working? Recall, we spike in a constant
+ammount of an exogenous RNA template (modified so we can identify it via
+sequencing) corresponding to the region of the viral genome we are
+trying to amplify. Since the resulting amplicons of the spike-in and
+viral RNA are practically identical (thus limiting potential
+amplification biases), differences in abundance of the viral RNA
+relative to the spike-in are mostly due to differences in initial viral
+copy-number.
+
+### HEK293 Lysate
+
+Let’s plot the ratio of viral RNA to spike-in as a function of
+increasing initial viral RNA copies. We’ll restrict our analysis to the
+HEK293 lysate as the NP samples didn’t amplify enough (see earlier reads
+per well plots).
 
 ``` r
-df.tidy %>%
-  filter(Expr != 'NP_Control', !is.na(lysate)) %>%
-  ggplot(aes(x=copies+0.1, y=(RNA+1)/(Spike_Count+1), group=copies)) +
-  geom_boxplot() +
-  scale_x_log10() +
-  scale_y_log10() +
-  facet_wrap(~paste(lysate, Expr, assay, sep='\n'))
-```
-
-![](figs/unnamed-chunk-10-1.png)<!-- -->
-
-We can see that indeed, we are getting detection from the various RNA
-samples in HEK293 lysate. NP samples are much harder to detect, although
-we can detect heat inactivated virus.
-
-### HEK293 LYSATE + ATCC RNA
-
-This seems to be one of our best assays. Let’s zoom in.
-
-``` r
-df.tidy %>%
-  filter(
-    lysate == 'HEK293',
-    Expr == 'ATCC_RNA'
-  ) %>%
+df.tidy.nulls %>%
+  filter(lysate == 'HEK293') %>%
+  inner_join(well.total) %>%
   mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
   ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
   geom_boxplot(outlier.shape = NA) +
-  geom_quasirandom(alpha=0.4) +
+  geom_quasirandom(alpha=0.4, aes(color=log10(Well_Total))) +
+  scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
+  scale_y_log10() +
+  scale_color_viridis_c(option = 'plasma', direction = -1) +
+  annotation_logticks() +
+  facet_grid(assay ~ Expr)
+```
+
+![](figs/hek-lysate-1.png)<!-- -->
+
+We can see that indeed, we are getting detection from the various RNA
+samples in HEK293 lysate. We can also see a systematic upward bias in
+the ratio for wells that have low counts. The graphs here are a bit
+nasty because `ggplot` is having a hard time setting the boxplot width
+on a continuous axis…
+
+### Simple Classifier
+
+We can build a simple classifier by using null distribution (wells
+without viral RNA input) to set our limit of detection. We’ll illustrate
+this concept on one RNA-Primer pair and generalize later. We’ll drop any
+wells with \< 1000 reads as well.
+
+``` r
+test.df <- df.tidy.nulls %>%
+  inner_join(well.total) %>%
+  filter(
+  lysate == 'HEK293',
+  assay == 'S2_RPP30',
+  Expr == 'ATCC_RNA',
+  Well_Total >= 1000
+  )
+
+test.df %>%
+  inner_join(well.total) %>%
+  mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
+  ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_quasirandom(alpha=0.4, aes(color=log10(Well_Total))) +
+  scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
+  scale_y_log10() +
+  scale_color_viridis_c(option = 'plasma', direction = -1) +
+  annotation_logticks()
+```
+
+![](figs/null-comp-1.png)<!-- -->
+
+From an initial inspection, it looks like we’re able to detect \~1 copy
+of viral RNA. One approach would be to perform a one-sided, one-sample
+t-test of every point relat=ve to the null distribution. We’ll take this
+a step further by parameterizing our data with the negative binomial
+distribution. This takes into account the count-based nature of our
+data, as well as the over-dispersion commonly seen in sequencing
+datasets.
+
+``` r
+# estimate dispersion from nulls
+theta <- test.df %>%
+  filter(copies == 0) %>%
+  glm.nb(RNA ~ offset(log(Spike_Count)) + RPP30, data=.) %$%
+  theta
+```
+
+Next we need to run the actual tests. To do this we will run a negative
+binomial regression for each well relative to the null. This will
+require some munging to get the nulls at each position and to get the
+regression to perform a one-sided rather than a two-sided test.
+
+``` r
+# note we're using speedglm here instead of glm as it's more numerically stable
+# exctract the t-statistic for the well
+# run a one-sided, one-tailed, t-test
+tidy.nb <- function(df, theta){
+  nb <- speedglm(RNA ~ var + RPP30 + offset(log(Spike_Count)), 
+                 family=negative.binomial(theta=theta),
+                 maxit=1000,
+                 data=df)
+  # recall summary goes: estimate, std. error, t.val, p.val
+  # the coefs are stored in a data.frame
+  var.effect <- summary(nb)$coefficients[2,]
+  deg.free <- nb$df
+  p.val <- pt(var.effect[1,3], df=deg.free, lower.tail=F)
+  
+  out.df = tibble(
+    Estimate = var.effect[1,1],
+    StdErr = var.effect[1,2],
+    t.val = var.effect[1,3],
+    p.val = p.val
+  )
+  return(out.df)
+}
+
+# collapse the relevant parameters into a list df 
+# bind the null data to them
+# re-level so the model compares to Null
+bind.null <- function(null, data){
+  null %>%
+    select(RNA, Spike_Count, RPP30) %>%
+    mutate(var = 'Null') %>%
+    bind_rows(data %>% mutate(var = 'Well')) %>%
+    mutate(var = factor(var, levels = c('Null', 'Well')))
+}
+
+# grab the null distribution so we can bind it to each well
+test.null <- test.df %>%
+    filter(copies == 0) %>%
+    select(assay,  lysate, RNA, Spike_Count, RPP30) %>%
+    nest(null = c(-assay, -lysate))
+
+# collapse each well, bind in the null, run the regression, correct for testing
+test.classify <- test.df %>%
+    nest(data = c(RNA, Spike_Count, RPP30)) %>%
+    inner_join(test.null) %>%
+    mutate(
+        df.null = map2(null, data, bind.null),
+        nb = map(df.null, ~tidy.nb(.x, theta))
+    )  %>%
+    select(-data, -null, -df.null) %>%
+    unnest(nb) %>%
+    mutate(FDR = p.adjust(p.val, method='fdr')) 
+```
+
+Let’s color our points by whether or not they’re different than the
+nulls with an FDR of 10%
+
+``` r
+test.classify %>%
+  select(Sample_ID, Estimate:FDR) %>%
+  inner_join(test.df) %>%
+  mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
+  ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_quasirandom(alpha=0.4, aes(color=FDR < 0.1)) +
+  scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
+  scale_y_log10() +
+  annotation_logticks()
+```
+
+![](figs/classifier-1.png)<!-- -->
+
+# General Classifier
+
+Extending the principles we developed above, we can run our classifier
+on the HEK293 lysate samples.
+
+``` r
+# first filter our data down to the relevan core
+# and remove wells < 1000 reads
+classify.vals <- df.tidy.nulls %>%
+  inner_join(well.total) %>%
+  filter(
+    Well_Total > 1000,
+    lysate == 'HEK293'
+  )
+
+classify.nulls <- classify.vals %>%
+  filter(copies == 0) %>%
+  select(assay, lysate, Expr, RNA, Spike_Count, RPP30) %>%
+  nest(null = c(-assay, -lysate, -Expr))
+```
+
+Again, first calculate the dispersion
+
+``` r
+classify.thetas <- classify.nulls %>%
+  mutate(theta = map_dbl(null, ~glm.nb(RNA ~ offset(log(Spike_Count)) + RPP30, data=.x) %$% theta)) %>%
+  select(-null)
+```
+
+Like above, we’ll bind the nulls to each position and test to see if
+they’re different. Here we’re taking advantage of the `future_map...`
+functions to distribute everything over all available cores.
+
+``` r
+classify.fin <- classify.vals %>%
+  nest(data = c(RNA, Spike_Count, RPP30)) %>%
+  inner_join(classify.thetas) %>%
+  inner_join(classify.nulls) %>%
+  mutate(
+    df.null = future_map2(null, data, bind.null),
+    nb = future_map2(df.null, theta, tidy.nb)
+  ) %>%
+  select(-data, -null, -df.null) %>%
+  unnest(nb) %>%
+  group_by(assay, lysate, Expr) %>%
+  mutate(FDR = p.adjust(p.val, method='fdr')) %>%
+  ungroup() %>%
+  select(Sample_ID, theta:FDR)
+```
+
+## HEK293 Lysate Classification
+
+``` r
+classify.vals %>%
+  inner_join(classify.fin) %>%
+  mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
+  ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_quasirandom(alpha=0.4, aes(color=FDR < 0.1)) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
   scale_y_log10() +
   annotation_logticks() +
-  facet_wrap(~assay)
+  facet_grid(assay ~ Expr)
 ```
 
-![](figs/unnamed-chunk-11-1.png)<!-- -->
+![](figs/general-classifier-1.png)<!-- -->
