@@ -5,7 +5,7 @@ SHELL := /bin/bash
 # VARIABLES
 
 # sequencing run ids
-RUNS := $(shell find data -maxdepth 1 -mindepth 1 -type d -exec basename {} \;)
+RUNS := $(shell find data/seq-runs -maxdepth 1 -mindepth 1 -type d -exec basename {} \;)
 
 #===============================================================================
 # RECIPIES
@@ -25,8 +25,14 @@ deep_clean:
 #===============================================================================
 # PIPELINE
 
+# copy barcode map from data/ folder.
+pipeline/%/bc-map.csv:
+	@echo "Grabbing $@"
+	@mkdir -p $(dir $@)
+	@cp data/barcode-map.csv $@
+
 # grab relevant section of samplesheet (make sure to catch windows return)
-pipeline/%/conditions.csv: data/%/SampleSheet.csv pipeline/%/bc-map.csv
+pipeline/%/conditions.csv: data/seq-runs/%/SampleSheet.csv pipeline/%/bc-map.csv
 	@echo "Parsing $<"
 	@python src/strip-windows.py $< \
 		| awk '/Sample_ID/{seen=1} seen{print}' \
@@ -34,7 +40,7 @@ pipeline/%/conditions.csv: data/%/SampleSheet.csv pipeline/%/bc-map.csv
 		2> $(@:.csv=.err)
 
 # Run starcode on each fastq, using gnu parallel to parse the conditions for barcode length
-pipeline/%/starcode.csv: data/% pipeline/%/conditions.csv
+pipeline/%/starcode.csv: data/seq-runs/% pipeline/%/conditions.csv
 	@echo "Counting BCs for all fastq's in $<"
 	@parallel --header : --colsep "," \
 		zcat $</"{Sample_ID}"_S*_R1_001.fastq.gz \

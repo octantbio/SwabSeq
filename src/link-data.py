@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import re
 import argparse
 from pathlib import Path
