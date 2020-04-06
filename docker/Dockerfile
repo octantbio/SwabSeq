@@ -8,7 +8,6 @@ RUN echo "umask 0002" >> /home/rstudio/.bashrc
 #===============================================================================
 # Environment Variables
 ENV starcode_version 1.3
-ENV rclone_version 1.51.0
 
 #===============================================================================
 
@@ -24,25 +23,14 @@ RUN apt-get update \
     wget \
     parallel
 
-
-    # libudunits2-dev \
-    # gdal-bin \
-    # proj-bin \
-    # libgdal-dev \
-    # libproj-dev
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # R Deps
 RUN install2.r --error \
     glmnet \
+    speedglm \
     sandwich \
     ggbeeswarm \
     BiocManager
-
-    # ggnewscale \
-    # janitor \
-    # ggrepel \
-    # cowplot \
 
 # Install github packages
 RUN installGithub.r \
@@ -98,16 +86,6 @@ RUN set -u; \
     && make \
     && cp starcode /usr/local/bin/starcode \
     && rm ../starcode.tar.gz
-
-# # rclone
-# WORKDIR /usr/local
-# RUN set -u; \
-#     wget -O rclone.zip "https://downloads.rclone.org/v${rclone_version}/rclone-v${rclone_version}-linux-amd64.zip" \
-#     && unzip rclone.zip \
-#     && cd "rclone-v${rclone_version}-linux-amd64" \
-#     && mv rclone /usr/local/bin \
-#     && cd .. \
-#     && rm -r "rclone-v${rclone_version}-linux-amd64"
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # final touches
