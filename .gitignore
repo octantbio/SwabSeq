@@ -12,15 +12,14 @@ __pycache__
 data/seq-runs/*
 !data/seq-runs/.gitignore
 
-# Add only our plate maps and intermediate results
+# Add only our plate maps and the example intermediate results
 data/plate-maps/*
 !data/plate-maps/200330*
 !data/plate-maps/200401*
 !data/plate-maps/200402*
+!data/plate-maps/example*
 pipeline/*
-!pipeline/200330*
-!pipeline/200401*
-!pipeline/200402*
+!pipeline/example*
 
 # Core dumps (I think this is what this is)
 core
