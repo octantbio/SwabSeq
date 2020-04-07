@@ -1,12 +1,12 @@
 # SwabSeq
 
-SwabSeq, allows for detection of SARS-COV-2 genomic RNA, without purification, in a single-step RT-PCR followed by sequencing. This eliminates some of the current bottlenecks to most current COVID sequencing protocols (e.g. rare/expensive reagents, extra purification steps, qPCR), and also utilizes multiplexing to sequence larger sets of samples without extensive automation.
+SwabSeq allows for detection of SARS-COV-2 genomic RNA, without purification, in a single-step RT-PCR followed by sequencing. This eliminates some of the current bottlenecks to most current COVID sequencing protocols (e.g. rare/expensive reagents, extra purification steps, qPCR), and also utilizes multiplexing to sequence larger batches of samples without extensive automation.
 
 SwabSeq is:
 
 - simple (1 person can run 1-10k samples in a day if in microtiter plates w/ no automation)
 - cheap (~$1/sample in consumable costs)
-- scalable (~10K samples/day, w/  automation 100k/day or more dependent on thermocycler capacity)
+- scalable (~10K samples/day, w/ automation 100k/day or more dependent on thermocycler capacity)
 - sensitive (LoD ~1-6 molecules/test) and quantitative (> 3-4 logs)
 
 This method does take time (~12 hours) and requires specialized equipment such as PCR machines and a sequencer, and thus is best suited for centralized testing facilities where scale can be achieved. In addition, there are still technical questions left to be answered, but we feel the results are promising enough for some of our collaborators to start testing on clinical samples. Finally, new technical methodologies such as this will not solve any of the considerable logistical problems of swabbing, data entry, sample processing into microtiter plates, and returning results to that many people at once.
