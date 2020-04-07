@@ -1,0 +1,334 @@
+---
+title: "SARS-CoV-2 platform run 1 analysis"
+author: "Aaron"
+date: "03/31/2020"
+output: 
+github_document:
+  toc: true
+  toc_depth: 2
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r imports}
+# tidyverse
+library(broom)
+library(furrr) # <- parallel map (future_map, plan) (devtools for walk)
+library(readxl) # <- read_xlsx
+library(magrittr)
+library(tidyverse)
+library(ggbeeswarm) # <- geom_quasirandom
+
+
+# workaround to enable multicore with new rstudio versions
+options(future.fork.enable = TRUE)
+plan(multicore)
+set.seed(42)
+```
+
+```{r}
+guess_max <- 100000
+
+reads <-   read_csv('starcode.csv')
+cond <-    read_csv('conditions.csv', guess_max=guess_max) 
+bc.map <-  read_csv('bc-map.csv', guess_max=guess_max)
+
+```
+
+```{r}
+# ------------------------------------------------------------------------------------
+# add explicit zeros to the data
+
+explicit.zeros <- function(df, bc.map) {
+  # take only bc_sets and targets from the current run
+  # assumes df has been joined with condition sheet
+  bc.map %>%
+    filter(
+      bc_set %in% unique(df$bc_set),
+    ) %>%
+    left_join(df, by = c('sequence', 'bc_set')) %>%
+    replace_na(list(Count = 0))
+}
+
+# select the relevant data
+bc.map.var <- bc.map %>%
+  select('sequence', 'target', 'bc_set')
+
+# drop the centroid column as it's not needed
+# coerce Count to integer to avoid weird scientic notation behavior in format_csv
+df <- reads %>%
+  select(-Centroid) %>%
+  rename(sequence=barcode) %>% 
+  inner_join(select(cond, Sample_ID, bc_set), by = 'Sample_ID') %>% 
+  group_by(Sample_ID) %>%
+  group_nest() %>%
+  mutate(foo = future_map(data, ~explicit.zeros(.x, bc.map.var))) %>%
+  select(-data) %>%
+  unnest(foo) %>%
+  inner_join(cond) %>%
+  mutate(Count = as.integer(Count))
+
+# write out joined data
+df %>%
+  write_csv('annotated_df.csv')
+```
+
+```{r}
+# ===============================================================================
+#                              PLOTS
+# ===============================================================================
+
+theme_pub <- function(base_size = 11, base_family = "") {
+  # based on https://github.com/noamross/noamtools/blob/master/R/theme_nr.R
+  # start with theme_bw and modify from there!
+  theme_bw(base_size = base_size, base_family = base_family) +# %+replace%
+    theme(
+      # grid lines
+      panel.grid.major.x = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.y = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.background   = element_blank(),
+      
+      # axis options
+      axis.ticks.y   = element_blank(),
+      axis.title.x   = element_text(size=rel(2), vjust=0.25),
+      axis.title.y   = element_text(size=rel(2), vjust=0.35),
+      axis.text      = element_text(color="black", size=rel(1)),
+      
+      # legend options
+      legend.title    = element_text(size=rel(1.5)),
+      legend.key      = element_rect(fill="white"),
+      legend.key.size = unit(1, "cm"),
+      legend.text     = element_text(size=rel(1.5)),
+      
+      # facet options
+      strip.text = element_text(size=rel(2)),
+      strip.background = element_blank(),
+      
+      # title options
+      plot.title = element_text(size=rel(2.25), vjust=0.25, hjust=0.5)
+    )
+}
+theme_set(theme_pub())
+```
+
+Let's first just look at reads per well across our plates:
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  count(Plate_ID, Sample_Well, bc_set, nCoV_amplicon, wt=Count, name='well_total') %>%
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(well_total))) +
+  geom_raster() +
+  facet_wrap(~paste(Plate_ID, nCoV_amplicon, sep = ' - ')) +
+  scale_fill_viridis_c(option='plasma') +
+  coord_equal()
+```
+
+The N1 assay looks to have much higher coverage, even though we normed the plates to the same total.
+
+Regarding the N1 to S2 difference in depth, let's sum across the plates:
+
+```{r, fig.width=4, fig.height=3}
+df %>%
+  count(nCoV_amplicon, wt=Count, name='total_counts') %>%
+  ggplot(aes(x=nCoV_amplicon, y=total_counts)) +
+  geom_bar(stat='identity')
+```
+
+N1 assay took about twice as many reads even though we Denovixed them both and went for 1:1. Could just be quant imprecision?
+
+Let's look at RPP30 reads between the plates/wells:
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(RPP30))) +
+  geom_raster() +
+  facet_wrap(~paste(Plate_ID, nCoV_amplicon, sep = ' - ')) +
+  scale_fill_viridis_c(option='plasma') +
+  coord_equal()
+```
+
+It's surprising that these don't differ as much. There is some evidence of winning i7 primers, showing up in blocks of 4 (these were added with the liquidator).
+
+Let's move on to look at nCoV reads:
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(`SARS-CoV-2`))) +
+  geom_raster() +
+  facet_wrap(~paste(Plate_ID, nCoV_amplicon, sep = ' - ')) +
+  scale_fill_viridis_c(option='plasma') +
+  coord_equal()
+```
+
+Most of these cluster at the top, which makes sense since that's where we added the most copies of nCoV RNA.
+
+Let's plot this as a proportion of total reads:
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  add_count(Sample_Well, wt=Count, name='well_total') %>% 
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(SARS_to_total=(`SARS-CoV-2`)/well_total) %>% 
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(SARS_to_total))) +
+  geom_raster() +
+  facet_wrap(~paste(Plate_ID, nCoV_amplicon, sep = ' - ')) +
+  scale_fill_viridis_c(option='plasma') +
+  coord_equal()
+```
+
+It's odd that the S2 assay shows more nCoV reads in the top right. We added lower concentration of sample there.
+
+Let's plot this out across the range of RNA copies we added in:
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(SARS_to_RPP30=`SARS-CoV-2`/RPP30, 
+         Twist_RNA_copies=factor(floor(Twist_RNA_copies))) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=SARS_to_RPP30, group=Twist_RNA_copies)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_quasirandom(alpha=0.1) +
+  scale_y_log10() +
+  facet_wrap(~paste(nCoV_amplicon, sep = ' - '))
+```
+
+The data are pretty noisy, but it seems that we are seeing a bump in this proportion around 30 copies for S2 and 100 for N1. 
+
+While piling up the raw reads, I noticed that the technical spike in amplicon was showing up. Let's plot the spike reads across conditions to try to get a sense of where they are showing up:
+
+```{r, fig.width=12, fig.height=7}
+# plot spike reads for each condition
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(Twist_RNA_copies=factor(floor(Twist_RNA_copies))) %>% 
+  mutate(spike=spike+0.1) %>% 
+  rename(spike_reads=spike) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=spike_reads, group=Twist_RNA_copies)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_quasirandom(alpha=0.1, groupOnX=TRUE) +
+  scale_y_log10(breaks=c(0.1,1,10,100,1000,10000), labels=c('ND','1e0','1e1','1e2','1e3','1e4')) +
+  facet_wrap(~paste(nCoV_amplicon, sep = ' - '))
+```
+
+Clearly it's not showing up in S2, which makes sense since the spike doesn't have priming sites for those primers. Let's drill down on N1 and look at proportions:
+
+```{r, fig.width=12, fig.height=7}
+# plot spike reads for each condition
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  filter(nCoV_amplicon=='N1') %>% 
+  mutate(Twist_RNA_copies=factor(floor(Twist_RNA_copies))) %>% 
+  mutate(spike_to_Twist=(spike+1)/`SARS-CoV-2`) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=spike_to_Twist, group=Twist_RNA_copies)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_quasirandom(alpha=0.1) +
+  scale_y_log10(breaks=c(0.1,1,10,100,1000,10000), labels=c('ND','1e0','1e1','1e2','1e3','1e4')) +
+  facet_wrap(~paste(nCoV_amplicon, sep = ' - '))
+```
+
+Ratio is 1 at about 3000 copies, so that's our best estimate for the level of contamination.
+
+Let's shift gears to look at barcode contamination. We set up this plate so that the highest amounts of Twist RNA were put into wells with the same i5 index. This way, we can estimate barcode contamination by looking for read contamination into wells that didn't get Twist RNA, depending on whether they share the i5 or have a different one. First, here's the plate layout of i5s (we had 96 i7s, in a standard 96 grid):
+
+```{r, fig.width=12, fig.height=7}
+df %>%
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=index2)) +
+  geom_raster() +
+  facet_wrap(~paste(Plate_ID, nCoV_amplicon, sep = ' - ')) +
+  coord_equal()
+```
+
+Now, let's look at reads in no Twist RNA wells across i5s:
+
+```{r, fig.width=16, fig.height=7}
+# plot Twist reads for each condition across i5s to look for instances of contamination
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = LETTERS[1:16]),
+    Col = str_sub(Sample_Well, 2),
+    Twist_RNA_copies=factor(floor(Twist_RNA_copies)),
+    index2=factor(index2, levels=c('AAGATCTG', 'GCGCAACT', 'TGTAACAG', 'TGTCATGA',
+                                   'ATGCCCTC', 'GCAAGATT', 'GTAATCTG', 'CTCAGATG')),
+    `SARS-CoV-2`=`SARS-CoV-2`+0.1) %>% 
+  ggplot(aes(x=Twist_RNA_copies, y=`SARS-CoV-2`, group=Twist_RNA_copies)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_quasirandom(aes(color=Row), alpha=0.2) +
+  scale_y_log10(breaks=c(0.1,1,10,100,1000,10000), labels=c('ND','1e0','1e1','1e2','1e3','1e4')) +
+  facet_grid(nCoV_amplicon~index2) + 
+  theme(axis.text.x = element_text(angle = 90, vjust=0.3))
+```
+
+Does seem like we get more nCoV reads in 0 condition when the i5 has high template samples, but it's not that big of an effect. The high amount of contamination in the rightmost indexes for each assay are surprising. Let's put those on a plate map:
+
+```{r, fig.width=12, fig.height=5}
+# look at 0 template wells across plate and see where contaminated ones fall
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  mutate(`SARS-CoV-2`=if_else(!(index2 %in% c('TGTCATGA', 'CTCAGATG')), as.integer(NA),`SARS-CoV-2`)) %>%
+  # mutate(`SARS-CoV-2`=`SARS-CoV-2`+0.1) %>% 
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(`SARS-CoV-2`))) +
+  geom_raster() +
+  facet_wrap(~paste(Plate_ID, nCoV_amplicon, sep = ' - ')) +
+  scale_fill_viridis_c(option='plasma')
+```
+
+Seems like this is mostly happening in row 1 (not sure why it is worse in the S2 plate). This is where we have the highest amount of Twist RNA being put in with the D300, as shown in this plate map:
+
+```{r, fig.width=12, fig.height=5}
+# look at 0 template wells across plate and see where contaminated ones fall
+df %>%
+  select(-sequence) %>% 
+  spread(target, Count) %>% 
+  # mutate(`SARS-CoV-2`=if_else(index2!='TGTCATGA', as.integer(NA),`SARS-CoV-2`)) %>%
+  # mutate(`SARS-CoV-2`=`SARS-CoV-2`+0.1) %>% 
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(Twist_RNA_copies))) +
+  geom_raster() +
+  facet_wrap(~paste(Plate_ID, nCoV_amplicon, sep = ' - ')) +
+  scale_fill_viridis_c(option='plasma')
+```
+
+Based on these last few plots, we'll use pipettors and the liquidator to set up the next run. We're concerned about the D300 possibly dispensing into the wrong wells.
