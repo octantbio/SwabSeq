@@ -17,8 +17,7 @@ star: $(addprefix pipeline/, $(addsuffix /starcode.csv, $(RUNS)))
 # cleanup
 clean:
 	rm -f pipeline/*
-deep_clean:
-	rm -f pipeline/* results/*
+
 .PRECIOUS: $(addprefix pipeline/, %/conditions.csv %/starcode.csv)
 .SECONDARY:
 
@@ -53,3 +52,6 @@ pipeline/%/starcode.csv: data/seq-runs/% pipeline/%/conditions.csv
 	| cat - $(@:.csv=.tmp) > $@ \
 	&& rm $(@:.csv=.tmp)
 
+# a dummy recipe so we dont have to store the example fastqs
+pipeline/example/starcode.csv: data/seq-runs/example/example-starcode.csv.gz pipeline/example/conditions.csv
+	zcat $< > $@

@@ -10,7 +10,7 @@ Nate
       - [Spike-in Cross-over](#spike-in-cross-over)
   - [Expression Relative to
     Spike-in’s](#expression-relative-to-spike-ins)
-      - [Tidying](#tidying)
+      - [Tidy-up](#tidy-up)
       - [Detection Plots](#detection-plots)
   - [General Classifier](#general-classifier)
       - [HEK293 Lysate Classification](#hek293-lysate-classification)
@@ -85,12 +85,11 @@ set.seed(42)
 # load data
 
 guess_max <- 100000
-run_id = '200402_NB552046_0038_AHLHM2BGXF'
+run_id = 'example'
 
 # barcode counts
 counts <- read_csv(paste0('../../pipeline/', run_id, '/starcode.csv'))
 well.total <- counts %>%
-  filter(Sample_ID != 'Undetermined') %>%
   distinct(Sample_ID, Centroid, Count)  %>%
   count(Sample_ID, wt=Count, name = 'Well_Total') 
 
@@ -107,19 +106,22 @@ Let’s make sense of the relevant parameters here. In each well, we are
 trying to quantify the counts of 5 different barcodes:
 
 ``` r
-bc.map %>%
-  distinct(sequence, target, amplicon) %>%
+cond %>%
+  distinct(bc_set) %>%
+  inner_join(bc.map) %>%
   arrange(target)
 ```
 
-    ## # A tibble: 5 x 3
-    ##   sequence                   target     amplicon
-    ##   <chr>                      <chr>      <chr>   
-    ## 1 CGCAGAGCCTTCAGGTCAGAACCCGC RPP30      RPP30   
-    ## 2 TATCTTCAACCTAGGACTTTTCTATT SARS-CoV-2 S2      
-    ## 3 ACCAAACGTAATGCGGGGTGCATTTC SARS-CoV-2 N1      
-    ## 4 ATAGAACAACCTAGGACTTTTCTATT spike      S2_spike
-    ## 5 TGGTTTCGTAATGCGGGGTGCATTTC spike      N1_spike
+    ## Joining, by = "bc_set"
+
+    ## # A tibble: 5 x 4
+    ##   bc_set      sequence                   target     amplicon
+    ##   <chr>       <chr>                      <chr>      <chr>   
+    ## 1 N1_S2_RPP30 CGCAGAGCCTTCAGGTCAGAACCCGC RPP30      RPP30   
+    ## 2 N1_S2_RPP30 TATCTTCAACCTAGGACTTTTCTATT SARS-CoV-2 S2      
+    ## 3 N1_S2_RPP30 ACCAAACGTAATGCGGGGTGCATTTC SARS-CoV-2 N1      
+    ## 4 N1_S2_RPP30 ATAGAACAACCTAGGACTTTTCTATT spike      S2_spike
+    ## 5 N1_S2_RPP30 TGGTTTCGTAATGCGGGGTGCATTTC spike      N1_spike
 
 one representing the housekeeping gene RPP30, two representing different
 amplicons from the COVID-19, and two different spike in controls (one
@@ -134,25 +136,26 @@ an example well
 counts %>%
   filter(Sample_ID == 'Plate1-A01') %>%
   distinct(Sample_ID, Centroid, Count) %>%
-  left_join(bc.map %>% filter(assay == 'N1_RPP30') %>% rename(Centroid = sequence)) %>%
+  mutate(bc_set = 'N1_S2_RPP30') %>%
+  left_join(bc.map %>% rename(Centroid = sequence)) %>%
   head(n=10)
 ```
 
-    ## Joining, by = "Centroid"
+    ## Joining, by = c("Centroid", "bc_set")
 
     ## # A tibble: 10 x 6
-    ##    Sample_ID  Centroid                   Count target     amplicon assay   
-    ##    <chr>      <chr>                      <dbl> <chr>      <chr>    <chr>   
-    ##  1 Plate1-A01 TGGTTTCGTAATGCGGGGTGCATTTC 12279 spike      N1_spike N1_RPP30
-    ##  2 Plate1-A01 ACCAAACGTAATGCGGGGTGCATTTC   734 SARS-CoV-2 N1       N1_RPP30
-    ##  3 Plate1-A01 TTGGTTTCGTGATGCGGGGTGCATTT    67 <NA>       <NA>     <NA>    
-    ##  4 Plate1-A01 TGGCTTCGTTAATGCGGGGTGCATTT    62 <NA>       <NA>     <NA>    
-    ##  5 Plate1-A01 GGTTCGTAATGCGGGGTGCATTTCGC    33 <NA>       <NA>     <NA>    
-    ##  6 Plate1-A01 CGCAGAGCCTTCAGGTCAGAACCCGC    15 RPP30      RPP30    N1_RPP30
-    ##  7 Plate1-A01 AGCATACCAAAAACGTCATAAAAATC    11 <NA>       <NA>     <NA>    
-    ##  8 Plate1-A01 TGGTTTCGTACTGCGGGTGCATTTCG    10 <NA>       <NA>     <NA>    
-    ##  9 Plate1-A01 ATTCATCTAGCTGTGGGATTGGGCAT     8 <NA>       <NA>     <NA>    
-    ## 10 Plate1-A01 AGGATACGTAATGCGGGGTGCATTTC     3 <NA>       <NA>     <NA>
+    ##    Sample_ID  Centroid                   Count bc_set      target     amplicon
+    ##    <chr>      <chr>                      <dbl> <chr>       <chr>      <chr>   
+    ##  1 Plate1-A01 TGGTTTCGTAATGCGGGGTGCATTTC 12279 N1_S2_RPP30 spike      N1_spike
+    ##  2 Plate1-A01 ACCAAACGTAATGCGGGGTGCATTTC   734 N1_S2_RPP30 SARS-CoV-2 N1      
+    ##  3 Plate1-A01 TTGGTTTCGTGATGCGGGGTGCATTT    67 N1_S2_RPP30 <NA>       <NA>    
+    ##  4 Plate1-A01 TGGCTTCGTTAATGCGGGGTGCATTT    62 N1_S2_RPP30 <NA>       <NA>    
+    ##  5 Plate1-A01 GGTTCGTAATGCGGGGTGCATTTCGC    33 N1_S2_RPP30 <NA>       <NA>    
+    ##  6 Plate1-A01 CGCAGAGCCTTCAGGTCAGAACCCGC    15 N1_S2_RPP30 RPP30      RPP30   
+    ##  7 Plate1-A01 AGCATACCAAAAACGTCATAAAAATC    11 N1_S2_RPP30 <NA>       <NA>    
+    ##  8 Plate1-A01 TGGTTTCGTACTGCGGGTGCATTTCG    10 N1_S2_RPP30 <NA>       <NA>    
+    ##  9 Plate1-A01 ATTCATCTAGCTGTGGGATTGGGCAT     8 N1_S2_RPP30 <NA>       <NA>    
+    ## 10 Plate1-A01 AGGATACGTAATGCGGGGTGCATTTC     3 N1_S2_RPP30 <NA>       <NA>
 
 We can see that fortunately majority of reads in any well will
 correspond to sequences associated with our barcodes. Other sequences
@@ -169,6 +172,7 @@ well.
 counts %>%
   distinct(Sample_ID, Centroid, Count)  %>%
   count(Sample_ID, wt=Count, name = 'Well_Total') %>%
+  inner_join(cond) %>%
   separate(Sample_ID, into = c('Sample_Plate', 'Well'), sep = '-', remove=F) %>%
   mutate(
     Row = factor(str_sub(Well, 1, 1), levels = rev(LETTERS[1:16])),
@@ -177,7 +181,7 @@ counts %>%
   ggplot(aes(x=Col, y=Row, fill=log10(Well_Total))) +
   geom_raster() +
   coord_equal() +
-  facet_wrap(~Sample_Plate) +
+  facet_wrap(~paste(Sample_Plate, nCoV_amplicon, sep = ' - ')) +
   scale_fill_viridis_c(option = 'plasma')
 ```
 
@@ -201,11 +205,11 @@ well.total %>%
   facet_wrap(~Sample_Plate)
 ```
 
-![](figs/expr-layout-1.png)<!-- -->
+![](figs/RNA_origin-layout-1.png)<!-- -->
 
 we can see that the difference in reads comes from the sample prep -
-lysate from either nasopharyngeal (NP) swabs or HEK293 (NA are no HEK293
-lysate controls).
+lysate from either nasopharyngeal (NP) swabs, HEK293, or no HEK293
+lysate controls.
 
 ## Explicit Zeros
 
@@ -218,37 +222,31 @@ explicit.zeros <- function(df, bc.map) {
   # assumes df has been joined with condition sheet
   bc.map %>%
     filter(
-      assay %in% unique(df$assay),
+      bc_set %in% unique(df$bc_set),
     ) %>%
-    left_join(df, by = c('sequence', 'assay')) %>%
+    left_join(df, by = c('sequence', 'bc_set')) %>%
     replace_na(list(Count = 0))
 }
-
-# select the variables in the barcode map that vary
-# (and any additional info you want to include)
-bc.map.var <- bc.map %>%
-  select('sequence', 'target', 'amplicon', 'assay')
 
 # drop the centroid column as it's not needed
 # coerce Count to integer to avoid weird scientic notation behavior in format_csv
 df <- counts %>%
   select(-Centroid) %>%
   rename(sequence=barcode) %>% 
-  inner_join(select(cond, Sample_ID, assay), by = 'Sample_ID') %>% 
+  inner_join(select(cond, Sample_ID, bc_set), by = 'Sample_ID') %>% 
   group_by(Sample_ID) %>%
   group_nest() %>%
-  mutate(foo = future_map(data, ~explicit.zeros(.x, bc.map.var))) %>%
+  mutate(foo = future_map(data, ~explicit.zeros(.x, bc.map))) %>%
   select(-data) %>%
   unnest(foo) %>%
   inner_join(cond) %>%
   mutate(
     Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS)),
-    Col = str_sub(Sample_Well, 2)
+    Col = str_sub(Sample_Well, 2),
+    expected_amplicon = if_else(nCoV_amplicon == 'N1', "N1 Expected", "S2 Expected")
   ) %>%
-  select(Sample_ID, Row, Col, amplicon, assay, Count, Twist_RNA_copies:lysate)
+  select(-nCoV_amplicon)
 ```
-
-We’ll also join on the relevant experimental metadata.
 
 # QC
 
@@ -260,11 +258,10 @@ across the two different plates. Let’s see how much cross-over we had
 ``` r
 df %>%
   filter(str_detect(amplicon, "spike")) %>%
-  mutate(assay = if_else(str_detect(assay, "N1"), "N1 Expected", "S2 Expected")) %>%
   ggplot(aes(x=Col, y=Row, fill=log10(Count+1))) +
   geom_raster() +
   coord_equal() +
-  facet_grid(assay ~ amplicon) +
+  facet_grid(expected_amplicon ~ amplicon) +
   scale_fill_viridis_c(option = 'plasma')
 ```
 
@@ -275,8 +272,6 @@ very limited extent\!
 
 # Expression Relative to Spike-in’s
 
-## Tidying
-
 In addition to different sample preps, we used three different sources
 of COVID-19 RNA - heat inactivated virus from ATCC, COVID-19 RNA from
 ATCC, and COVID-19 RNA from Twist. We spiked these samples over a large
@@ -284,86 +279,36 @@ concentration range to test the sensitivity of our method.
 
 ``` r
 df %>%
-  select(assay, Row, Col, Twist_RNA_copies:ATCC_virus_copies)  %>%
-  distinct() %>%
-  gather(metric, value, Twist_RNA_copies:ATCC_virus_copies) %>%
-  ggplot(aes(x=Col, y=Row, fill=log10(value+0.1))) +
+  ggplot(aes(x=Col, y=Row, fill=log10(RNA_copies+0.1))) +
   geom_raster() +
   coord_equal() +
-  facet_wrap(~metric, ncol=2) +
+  facet_wrap(~expected_amplicon) +
   scale_fill_viridis_c()
 ```
 
-![](figs/untidy-copies-1.png)<!-- -->
+![](figs/tidy-RNA_copies-1.png)<!-- -->
 
-From this we can make a key. We’ll also make a normalization data frame
-so we can normalize relative to the proper control
+## Tidy-up
+
+Let’s break out the barcode counts into various columns as we will be
+comparing across them. To do this, we’ll filter out any of barcodes that
+aren’t expected for that condition (e.g. remove `N1` reads from the `S2`
+plate). We can then re-cast them as either `RNA` or `Spike` and spread,
+so that we have `RPP30`, `Spike`, or `RNA` columns. Recall, that we will
+still have the `expected_amplicon` column to tell you what the `Spike`
+and `RNA` columns refer to. We’ll also drop some of the less relevant
+meta data.
 
 ``` r
-expr <- list(
-  ATCC_Virus= LETTERS[1:4], 
-  ATCC_RNA = LETTERS[5:12], 
-  NP_Control = LETTERS[13:14], 
-  Twist_RNA = LETTERS[15:16]
-) %>%
-  enframe(name = 'Expr', value = 'Row') %>%
-  unnest(cols = 'Row') %>%
-  # mutate(Col = rep(list(c(paste0('0', 1:9), 10:24)), 16)) %>%
-  # unnest(cols='Col') %>%
-  mutate(Row = factor(Row, levels = rev(LETTERS)))
-
-tmp <- df %>%
-  # filter out the expected spike for a given assay
-  filter(
-    str_detect(amplicon, "spike"),
-    str_sub(amplicon, end=2) == str_sub(assay, end=2)
+df.wide <- df %>%
+  select(Sample_ID, Plate_ID, Row, Col, bc_set, lysate, expected_amplicon, RNA_origin, RNA_copies, amplicon, Count) %>%
+  filter(amplicon == 'RPP30' | str_detect(expected_amplicon, str_sub(amplicon, end=2)))  %>%
+  mutate(amplicon = case_when(amplicon == 'RPP30' ~ 'RPP30',
+                              str_detect(amplicon, 'spike') ~ 'Spike',
+                              TRUE ~ 'RNA')
   ) %>%
-  select(Sample_ID,  Spike_Count = Count) %>%
-  inner_join(df) %>%
-  # filter out amplicons from the wrong experiment
-  filter(
-    str_detect(amplicon, "spike", negate=T),
-    str_detect(assay, amplicon)
-  ) %>%
-  # recast amplicon as RNA in general so everything will work
-  mutate(amplicon = if_else(amplicon == 'RPP30', 'RPP30', 'RNA')) %>%
   spread(amplicon, Count)
-
-
-no.rna.control <- expr %>%
-  filter(Expr == 'NP_Control') %>%
-  inner_join(tmp) %>%
-  select(-contains("ATCC"), -contains("Twist")) %>%
-  mutate(
-    Expr = 'NP_Control',
-    copies = 0
-  )
-
-df.tidy <- tmp %>%
-  rename(ATCC_Virus = ATCC_virus_copies) %>%
-  gather(Expr, copies, Twist_RNA_copies:ATCC_Virus) %>%
-  mutate(Expr = str_remove(Expr, '_copies')) %>%
-  inner_join(expr)  %>%
-  bind_rows(no.rna.control) %>%
-  # clean up the control wells
-  mutate(
-    lysate = if_else(is.na(lysate), 'Control', lysate),
-    assay = if_else(str_detect(assay, 'N1'), 'N1 Pimers', 'S2 Primers')
-  )
 ```
-
-Let’s plot the new dataframe to make sure everything is tidied properly
-
-``` r
-df.tidy %>%
-  ggplot(aes(x=Col, y=Row, fill=log10(copies+0.1))) +
-  geom_raster() +
-  coord_equal() +
-  facet_wrap(~assay) +
-  scale_fill_viridis_c()
-```
-
-![](figs/tidy-copies-1.png)<!-- -->
 
 ### Null Distribution
 
@@ -373,28 +318,30 @@ exogenous RNA-spikes, we can pool them together. We must take into
 acount what lysate the orginated from, however.
 
 ``` r
-df.tidy %>%
-  filter(copies == 0) %>%
+df.wide %>%
+  filter(RNA_copies == 0) %>%
   ggplot(aes(x=Col, y=Row, fill=lysate)) +
   geom_raster() +
   coord_equal() +
-  facet_wrap(~assay)
+  facet_wrap(~expected_amplicon)
 ```
 
 ![](figs/null-placement-1.png)<!-- -->
 
-Let’s add the nulls to each of the different experiments
+Let’s add the nulls to each of the different experiments. Again, we drop
+the `RNA_origin` column since the nulls are being pooled, but we keep
+`lysate` and `expected_amplicon` to ensure the nulls are properly
+divided within a plate
 
 ``` r
-nulls <- df.tidy %>%
-  filter(copies == 0) %>%
-  select(-Expr) %>%
-  nest(null.df = c(-assay, -lysate))
+nulls <- df.wide %>%
+  filter(RNA_copies == 0) %>%
+  select(-RNA_origin) %>%
+  nest(null.df = c(-expected_amplicon, -lysate))
 
-
-df.tidy.nulls <- df.tidy %>%
-  filter(copies != 0) %>%
-  nest(data = c(-assay, -lysate, -Expr)) %>%
+df.wide.nulls <- df.wide %>%
+  filter(RNA_copies != 0) %>%
+  nest(data = c(-expected_amplicon, -lysate, -RNA_origin)) %>%
   inner_join(nulls) %>%
   mutate(combo = map2(data, null.df, bind_rows)) %>%
   select(-data, -null.df) %>%
@@ -415,23 +362,23 @@ copy-number.
 ### HEK293 Lysate
 
 Let’s plot the ratio of viral RNA to spike-in as a function of
-increasing initial viral RNA copies. We’ll restrict our analysis to the
-HEK293 lysate as the NP samples didn’t amplify enough (see earlier reads
-per well plots).
+increasing initial viral RNA RNA\_copies. We’ll restrict our analysis to
+the HEK293 lysate as the NP samples didn’t amplify enough (see earlier
+reads per well plots).
 
 ``` r
-df.tidy.nulls %>%
+df.wide.nulls %>%
   filter(lysate == 'HEK293') %>%
   inner_join(well.total) %>%
-  mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
-  ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
+  mutate(RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies)) %>%
+  ggplot(aes(x=RNA_copies, y=(RNA+1)/(Spike+1), group=RNA_copies)) +
   geom_boxplot(outlier.shape = NA) +
   geom_quasirandom(alpha=0.4, aes(color=log10(Well_Total))) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
   scale_y_log10() +
   scale_color_viridis_c(option = 'plasma', direction = -1) +
   annotation_logticks() +
-  facet_grid(assay ~ Expr)
+  facet_grid(expected_amplicon ~ RNA_origin)
 ```
 
 ![](figs/hek-lysate-1.png)<!-- -->
@@ -450,19 +397,19 @@ this concept on one RNA-Primer pair and generalize later. We’ll drop any
 wells with \< 1000 reads as well.
 
 ``` r
-test.df <- df.tidy.nulls %>%
+test.df <- df.wide.nulls %>%
   inner_join(well.total) %>%
   filter(
     lysate == 'HEK293',
-    assay == 'S2 Primers',
-    Expr == 'ATCC_RNA',
+    expected_amplicon == 'S2 Expected',
+    RNA_origin == 'ATCC_RNA',
     Well_Total >= 1000
   )
 
 test.df %>%
   inner_join(well.total) %>%
-  mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
-  ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
+  mutate(RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies)) %>%
+  ggplot(aes(x=RNA_copies, y=(RNA+1)/(Spike+1), group=RNA_copies)) +
   geom_boxplot(outlier.shape = NA) +
   geom_quasirandom(alpha=0.4, aes(color=log10(Well_Total))) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
@@ -484,8 +431,8 @@ datasets.
 ``` r
 # estimate dispersion from nulls
 theta <- test.df %>%
-  filter(copies == 0) %>%
-  glm.nb(RNA ~ offset(log(Spike_Count)) + RPP30, data=.) %$%
+  filter(RNA_copies == 0) %>%
+  glm.nb(RNA ~ offset(log(Spike)) + RPP30, data=.) %$%
   theta
 ```
 
@@ -499,7 +446,7 @@ regression to perform a one-sided rather than a two-sided test.
 # exctract the t-statistic for the well
 # run a one-sided, one-tailed, t-test
 tidy.nb <- function(df, theta){
-  nb <- speedglm(RNA ~ var + RPP30 + offset(log(Spike_Count)), 
+  nb <- speedglm(RNA ~ var + RPP30 + offset(log(Spike)), 
                  family=negative.binomial(theta=theta),
                  maxit=1000,
                  data=df)
@@ -523,7 +470,7 @@ tidy.nb <- function(df, theta){
 # re-level so the model compares to Null
 bind.null <- function(null, data){
   null %>%
-    select(RNA, Spike_Count, RPP30) %>%
+    select(RNA, Spike, RPP30) %>%
     mutate(var = 'Null') %>%
     bind_rows(data %>% mutate(var = 'Well')) %>%
     mutate(var = factor(var, levels = c('Null', 'Well')))
@@ -531,13 +478,13 @@ bind.null <- function(null, data){
 
 # grab the null distribution so we can bind it to each well
 test.null <- test.df %>%
-  filter(copies == 0) %>%
-  select(assay,  lysate, RNA, Spike_Count, RPP30) %>%
-  nest(null = c(-assay, -lysate))
+  filter(RNA_copies == 0) %>%
+  select(expected_amplicon,  lysate, RNA, Spike, RPP30) %>%
+  nest(null = c(-expected_amplicon, -lysate))
 
 # collapse each well, bind in the null, run the regression, correct for testing
 test.classify <- test.df %>%
-  nest(data = c(RNA, Spike_Count, RPP30)) %>%
+  nest(data = c(RNA, Spike, RPP30)) %>%
   inner_join(test.null) %>%
   mutate(
     df.null = map2(null, data, bind.null),
@@ -548,7 +495,7 @@ test.classify <- test.df %>%
 
 # grab the largest t-statistic to use as a cutoff for the nulls
 max.t.test <- test.classify %>%
-  filter(copies == 0) %$%
+  filter(RNA_copies == 0) %$%
   max(t.val)
 ```
 
@@ -558,10 +505,10 @@ nulls, using the max t-statistic in the null distribution as a cutoff
 ``` r
 test.classify %>%
   mutate(
-    copies = if_else(copies == 0, 0.1, copies),
+    RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies),
     Detected = t.val > max.t.test
   ) %>%
-  ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
+  ggplot(aes(x=RNA_copies, y=(RNA+1)/(Spike+1), group=RNA_copies)) +
   geom_boxplot(outlier.shape = NA) +
   geom_quasirandom(alpha=0.4, aes(color=Detected)) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
@@ -569,7 +516,7 @@ test.classify %>%
   annotation_logticks() +
   labs(
     title = 'Detection of ATCC COVID-19 RNA in HEK293 Lysate',
-    x = 'Viral RNA Copies',
+    x = 'Viral RNA RNA_copies',
     y = 'RNA / Spike-in Control',
     color = 'Virus Detected?'
   )
@@ -585,7 +532,7 @@ on the HEK293 lysate samples.
 ``` r
 # first filter our data down to the relevant core
 # and remove wells < 1000 reads
-classify.vals <- df.tidy.nulls %>%
+classify.vals <- df.wide.nulls %>%
   inner_join(well.total) %>%
   filter(
     Well_Total > 1000,
@@ -593,16 +540,16 @@ classify.vals <- df.tidy.nulls %>%
   )
 
 classify.nulls <- classify.vals %>%
-  filter(copies == 0) %>%
-  select(assay, lysate, Expr, RNA, Spike_Count, RPP30) %>%
-  nest(null = c(-assay, -lysate, -Expr))
+  filter(RNA_copies == 0) %>%
+  select(expected_amplicon, lysate, RNA_origin, RNA, Spike, RPP30) %>%
+  nest(null = c(-expected_amplicon, -lysate, -RNA_origin))
 ```
 
 Again, first calculate the dispersion
 
 ``` r
 classify.thetas <- classify.nulls %>%
-  mutate(theta = map_dbl(null, ~glm.nb(RNA ~ offset(log(Spike_Count)) + RPP30, data=.x) %$% theta)) %>%
+  mutate(theta = map_dbl(null, ~glm.nb(RNA ~ offset(log(Spike)) + RPP30, data=.x) %$% theta)) %>%
   select(-null)
 ```
 
@@ -612,7 +559,7 @@ functions to distribute everything over all available cores.
 
 ``` r
 classify.fin <- classify.vals %>%
-  nest(data = c(RNA, Spike_Count, RPP30)) %>%
+  nest(data = c(RNA, Spike, RPP30)) %>%
   inner_join(classify.thetas) %>%
   inner_join(classify.nulls) %>%
   mutate(
@@ -627,8 +574,8 @@ classify.fin <- classify.vals %>%
 
 ``` r
 max.t.classify <- classify.fin %>%
-  filter(copies == 0) %>%
-  group_by(assay, lysate, Expr) %>%
+  filter(RNA_copies == 0) %>%
+  group_by(expected_amplicon, lysate, RNA_origin) %>%
   summarise(
     max.t = max(t.val),
     n.null = n()
@@ -638,18 +585,18 @@ max.t.classify <- classify.fin %>%
 classify.fin %>%
   inner_join(max.t.classify) %>%
   mutate(
-    copies = if_else(copies == 0, 0.1, copies),
+    RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies),
     Detected = t.val > max.t
   ) %>%
-  ggplot(aes(x=copies, y=(RNA+1)/(Spike_Count+1), group=copies)) +
+  ggplot(aes(x=RNA_copies, y=(RNA+1)/(Spike+1), group=RNA_copies)) +
   geom_boxplot(outlier.shape = NA) +
   geom_quasirandom(alpha=0.4, aes(color=Detected)) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
   scale_y_log10() +
   annotation_logticks() +
-  facet_grid(assay ~ Expr) +
+  facet_grid(expected_amplicon ~ RNA_origin) +
   labs(
-    x = 'Viral RNA Copies',
+    x = 'Viral RNA RNA_copies',
     y = 'RNA / Spike-in Control',
     color = 'Virus Detected?'
   )
@@ -663,16 +610,16 @@ What does our limit of detection look like sans spikes?
 
 ``` r
 classify.vals %>%
-  mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
-  ggplot(aes(x=copies, y=RNA+1, group=copies)) +
+  mutate(RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies)) %>%
+  ggplot(aes(x=RNA_copies, y=RNA+1, group=RNA_copies)) +
   geom_boxplot(outlier.shape = NA) +
   geom_quasirandom(alpha=0.4) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
   scale_y_log10() +
   annotation_logticks() +
-  facet_grid(assay ~ Expr) +
+  facet_grid(expected_amplicon ~ RNA_origin) +
   labs(
-    x = 'Viral RNA Copies',
+    x = 'Viral RNA RNA_copies',
     y = 'RNA Counts + 1'
   )
 ```
@@ -708,7 +655,7 @@ tidy.nb.spikeless <- function(df, theta){
 
 # run the regression
 classify.spikeless <- classify.vals %>%
-  nest(data = c(RNA, Spike_Count, RPP30)) %>%
+  nest(data = c(RNA, Spike, RPP30)) %>%
   inner_join(classify.thetas) %>%
   inner_join(classify.nulls) %>%
   mutate(
@@ -720,8 +667,8 @@ classify.spikeless <- classify.vals %>%
 
 # find the t-stats for the nulls
 max.t.spikeless <- classify.spikeless %>%
-  filter(copies == 0) %>%
-  group_by(assay, lysate, Expr) %>%
+  filter(RNA_copies == 0) %>%
+  group_by(expected_amplicon, lysate, RNA_origin) %>%
   summarise(
     max.t = max(t.val),
     n.null = n()
@@ -732,18 +679,18 @@ max.t.spikeless <- classify.spikeless %>%
 classify.spikeless %>%
   inner_join(max.t.spikeless) %>%
   mutate(
-    copies = if_else(copies == 0, 0.1, copies),
+    RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies),
     Detected = t.val > max.t
   ) %>%
-  ggplot(aes(x=copies, y=RNA + 1, group=copies)) +
+  ggplot(aes(x=RNA_copies, y=RNA + 1, group=RNA_copies)) +
   geom_boxplot(outlier.shape = NA) +
   geom_quasirandom(alpha=0.4, aes(color=Detected)) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
   scale_y_log10() +
   annotation_logticks() +
-  facet_grid(assay ~ Expr) +
+  facet_grid(expected_amplicon ~ RNA_origin) +
   labs(
-    x = 'Viral RNA Copies',
+    x = 'Viral RNA RNA_copies',
     y = 'RNA Counts + 1',
     color = 'Virus Detected?'
   )
@@ -758,14 +705,14 @@ ability to detect low amounts of virus.
 
 ``` r
 classify.vals %>%
-  gather(Amplicon, Count, Spike_Count, RNA, RPP30) %>%
-  mutate(copies = if_else(copies == 0, 0.1, copies)) %>%
-  ggplot(aes(x=copies, y=Count+1, color=Amplicon)) +
+  gather(Amplicon, Count, Spike, RNA, RPP30) %>%
+  mutate(RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies)) %>%
+  ggplot(aes(x=RNA_copies, y=Count+1, color=Amplicon)) +
   geom_quasirandom(alpha=0.3) +
   scale_x_log10(breaks = c(10^(-1:4)), labels = c(0,10^(0:4))) +
   scale_y_log10() +
   annotation_logticks() +
-  facet_grid(assay ~ Expr) +
+  facet_grid(expected_amplicon ~ RNA_origin) +
   labs(
     x = 'Viral RNA Copies',
     y = 'RNA Counts + 1'
