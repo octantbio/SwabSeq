@@ -16,7 +16,7 @@ star: $(addprefix pipeline/, $(addsuffix /starcode.csv, $(RUNS)))
 
 # cleanup
 clean:
-	rm -f pipeline/*
+	rm -rf pipeline/*
 
 .PRECIOUS: $(addprefix pipeline/, %/conditions.csv %/starcode.csv)
 .SECONDARY:
