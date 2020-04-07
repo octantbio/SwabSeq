@@ -18,6 +18,7 @@ This method does take time (~12 hours) and requires specialized equipment such a
 - [Installation](https://github.com/octantbio/swab-seq/wiki/Installation)
 - [Running the Analysis Pipeline](https://github.com/octantbio/swab-seq/wiki/Analysis-Details)
 - [Plate Map Spec](https://github.com/octantbio/swab-seq/wiki/Plate-Map-Spec)
+- [Example Analysis](./analyses/example/example-analysis.md)
 
 ## Experimental Protocols
 
