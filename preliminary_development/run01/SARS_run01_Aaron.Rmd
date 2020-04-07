@@ -3,9 +3,9 @@ title: "SARS-CoV-2 platform run 1 analysis"
 author: "Aaron"
 date: "03/31/2020"
 output: 
-github_document:
-  toc: true
-  toc_depth: 2
+  github_document:
+    toc: true
+    toc_depth: 2
 ---
 
 ```{r global_options, include=FALSE}
