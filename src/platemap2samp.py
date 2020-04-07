@@ -15,7 +15,7 @@ import plate_maps as pm
 
 # easily change the required variables
 # Plate_Primer = name of plate primer, not actual sequence
-REQ_VARS = set(['assay', 'index', 'index2'])
+REQ_VARS = set(['bc_set', 'index', 'index2'])
 
 
 # silly over optimization to make a fast reverse compliment
