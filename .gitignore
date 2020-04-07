@@ -8,14 +8,19 @@
 # Python stuff
 __pycache__
 
-# Data, pipeline, and results are too big, and don't want to accidentally add
+# Raw data, are too big, and don't want to accidentally add
 data/seq-runs/*
 !data/seq-runs/.gitignore
+
+# Add only our plate maps and intermediate results
 data/plate-maps/*
 !data/plate-maps/200330*
 !data/plate-maps/200401*
 !data/plate-maps/200402*
-results/*
+pipeline/*
+!pipeline/200330*
+!pipeline/200401*
+!pipeline/200402*
 
 # Core dumps (I think this is what this is)
 core
