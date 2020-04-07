@@ -1,0 +1,27 @@
+Parsed with column specification:
+cols(
+  Plate_ID = [31mcol_character()[39m,
+  index2 = [31mcol_character()[39m,
+  Twist_RNA_copies = [32mcol_double()[39m,
+  ATCC_RNA_copies = [32mcol_double()[39m,
+  ATCC_virus_copies = [32mcol_double()[39m,
+  spike_copies = [32mcol_double()[39m,
+  lysate = [31mcol_character()[39m,
+  nCoV_amplicon = [31mcol_character()[39m,
+  nCoV_primer_nM = [32mcol_double()[39m,
+  RPP30_primer_nM = [32mcol_double()[39m,
+  RPP30_inner_primer_nM = [32mcol_double()[39m,
+  assay = [31mcol_character()[39m,
+  RT_temp = [32mcol_double()[39m,
+  PCR_cycles = [32mcol_double()[39m,
+  Sample_Well = [31mcol_character()[39m,
+  index = [31mcol_character()[39m,
+  Sample_ID = [31mcol_character()[39m
+)
+Parsed with column specification:
+cols(
+  sequence = [31mcol_character()[39m,
+  target = [31mcol_character()[39m,
+  amplicon = [31mcol_character()[39m,
+  assay = [31mcol_character()[39m
+)

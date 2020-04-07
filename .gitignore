@@ -15,7 +15,6 @@ data/plate-maps/*
 !data/plate-maps/200330*
 !data/plate-maps/200401*
 !data/plate-maps/200402*
-pipeline/*
 results/*
 
 # Core dumps (I think this is what this is)
