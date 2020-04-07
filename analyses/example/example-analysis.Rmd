@@ -482,7 +482,7 @@ test.classify %>%
     title = 'Detection of ATCC COVID-19 RNA in HEK293 Lysate',
     x = 'Viral RNA Copies',
     y = 'RNA / Spike-in Control',
-    color = 'Virus Detected?\n(p = 0.022)'
+    color = 'Virus Detected?'
   )
 ```
 
