@@ -11,7 +11,7 @@ cols(
   nCoV_primer_nM = [32mcol_double()[39m,
   RPP30_primer_nM = [32mcol_double()[39m,
   RPP30_inner_primer_nM = [32mcol_double()[39m,
-  assay = [31mcol_character()[39m,
+  bc_set = [31mcol_character()[39m,
   RT_temp = [32mcol_double()[39m,
   PCR_cycles = [32mcol_double()[39m,
   Sample_Well = [31mcol_character()[39m,
@@ -23,5 +23,5 @@ cols(
   sequence = [31mcol_character()[39m,
   target = [31mcol_character()[39m,
   amplicon = [31mcol_character()[39m,
-  assay = [31mcol_character()[39m
+  bc_set = [31mcol_character()[39m
 )
