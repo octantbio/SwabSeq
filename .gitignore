@@ -10,8 +10,11 @@ __pycache__
 
 # Data, pipeline, and results are too big, and don't want to accidentally add
 data/seq-runs/*
+!data/seq-runs/.gitignore
 data/plate-maps/*
-!data/plate-maps/200402_example
+!data/plate-maps/200330*
+!data/plate-maps/200401*
+!data/plate-maps/200402*
 pipeline/*
 results/*
 
