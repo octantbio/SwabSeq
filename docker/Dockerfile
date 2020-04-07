@@ -72,7 +72,8 @@ RUN conda update -y conda \
     scikit-learn \
     ipython \
     jupyterlab \
-    openpyxl
+    openpyxl \
+    xlrd
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # other utils

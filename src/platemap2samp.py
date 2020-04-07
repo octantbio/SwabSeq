@@ -15,7 +15,7 @@ import plate_maps as pm
 
 # easily change the required variables
 # Plate_Primer = name of plate primer, not actual sequence
-REQ_VARS = set([])
+REQ_VARS = set(['assay', 'index', 'index2'])
 
 
 # silly over optimization to make a fast reverse compliment
@@ -31,76 +31,6 @@ def grouper(iterable, n, fillvalue=None):
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
     args = [iter(iterable)] * n
     return itertools.zip_longest(*args, fillvalue=fillvalue)
-
-#-------------------------------------------------------------------------------
-
-def flatten(listOfLists):
-    "Flatten one level of nesting"
-    return itertools.chain.from_iterable(listOfLists)
-
-#-------------------------------------------------------------------------------
-
-def check_req_vars(plate):
-    """
-    Ensure all required variables are named correctly and present in plates
-
-    Input:
-    ------
-    plate_vars :: dict
-        {var:[val, ...], var2:[val, ..]}
-
-    Output:
-    -------
-    None only raises errors
-
-    Depends:
-    --------
-    re
-    REQ_VARS :: set
-        all required variables
-    """
-    if not REQ_VARS.issubset(plate.keys()):
-        raise ValueError('The following plate variables must be present: {}\n'.format(REQ_VARS) + \
-                'Current plate variables:\n{}'.format(', '.join([*plate.keys()])))
-
-    # check the chem_ID and ensure they conform to our standards, or that "Dummy" variable is set to true
-    chem_id = re.compile(r'C-\d+')
-    if False in [bool(chem_id.match(x)) | (y == 'TRUE') for x, y in zip(plate['chem_ID'], plate['Dummy'])]:
-        raise ValueError('chem_ID must be C-X, where X is numeric!')
-
-    # check the cell_library and ensure they conform to our standards, or that "Dummy" variable is set to true
-    cell_library = re.compile(r'cb\d+|vl\d+')
-    if False in [bool(cell_library.match(x)) | (y == 'TRUE') for x, y in zip(plate['cell_library'], plate['Dummy'])]:
-        raise ValueError('cell_library must be cbX, where X is numeric!')
-
-    # ensure the bc_promoter is in the acceptable set, or that "Dummy" variable is set to true
-    if False in [(x in BC_PROMOTER) | (y == 'TRUE') for x, y in zip(plate['bc_promoter'], plate['Dummy'])]:
-        raise ValueError('bc_promoter must be in {}\nYou have: {}'.format(BC_PROMOTER, set(plate['bc_promoter'])))
-
-#-------------------------------------------------------------------------------
-
-def check_well_bc(well_bc_df):
-    """
-    Ensure well barcode file is formatted properly
-
-    Input:
-    ------
-    well_bc_df :: pandas df
-
-    Output:
-    -------
-    None only checks df
-
-    Depends:
-    --------
-    pandas as pd
-    """
-    if len(well_bc_df) != 384:
-        raise ValueError('Must have 384 well barcodes!')
-    elif 'Sample_Well' not in well_bc_df.columns:
-        raise ValueError('Must have Sample_Well column in well barcodes!')
-    elif 'Barcode' not in well_bc_df.columns:
-        raise ValueError('Must have Barcode column in well barcodes!')
 
 #-------------------------------------------------------------------------------
 
@@ -185,33 +115,22 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     #---------------------------------------------------------------------------
-    # well barcode processing
-
-    ## generate the 384 well index for joining barcodes
-    #row_384 = 'A B C D E F G H I J K L M N O P'.split(' ')
-    #col_384 = ['0' + str(x) for x in range(1,10)] + [str(x) for x in range(10,25)]
-    #well_idx = [''.join(x) for x in itertools.product(row_384, col_384)]
-
-    #if args.well_bc == 'BC_384_v2':
-    #    well_bc = pd.DataFrame.from_dict({'Sample_Well':well_idx, 'Barcode':BC_384_v2})
-    #elif args.well_bc == 'BC_384_v1':
-    #    well_bc = pd.DataFrame.from_dict({'Sample_Well':well_idx, 'Barcode':BC_384_v1})
-    #else:
-    #    well_bc = pd.read_csv(args.well_bc)
-    #check_well_bc(well_bc)
-
-    #---------------------------------------------------------------------------
     # parse plates
     plate_maps = pm.read_plate_maps(args.sheet)
     plate_sizes = pm.get_plate_sizes(plate_maps)
     
     # ensure the plate level vars are acceptable
     pm.check_plates_x_vars(plate_maps)
+    
+    # Ensure required columns are in the plate maps
+    if not REQ_VARS.issubset(plate_maps.keys()):
+        raise ValueError('The following plate required variables are not present: {}\n'.format(', '.join(REQ_VARS - plate_maps.keys())))
 
     # Convert to a df
     out_df = pm.plate_maps_to_df(plate_maps)
 
     #---------------------------------------------------------------------------
+
 
     sample_header, rc = prompt_header()
 
