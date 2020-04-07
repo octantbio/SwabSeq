@@ -33,13 +33,13 @@ Please feel free to open an issue or pull request.
 
 This was done largely by two Octant team members, Eric Jones and Aaron Cooper working out of the Octant lab while things were shut down.
 
-- **Eric Jones** - *Experimental Work*
-- **Aaron Cooper** - *Experimental and Initial Computational Work*
-- **Joshua Bloom** - *Statistical Modeling*
-- **Nathan Lubock** - *Packaging, documentation, etc.*
-- **Scott Simpkins** - *Packaging, documentation, etc.*
-- **Molly Gasperini** - *Coordination, experimental design*
-- **Sri Kosuri** - *External and Internal Coordination*
+- **Eric Jones** - *Project Lead*
+- **Aaron Cooper**
+- **Joshua Bloom**
+- **Nathan Lubock**
+- **Scott Simpkins**
+- **Molly Gasperini**
+- **Sri Kosuri**
 
 ## License
 
