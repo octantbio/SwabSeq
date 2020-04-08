@@ -3,6 +3,22 @@ SARS-CoV-2 platform run 4 analysis
 Aaron
 04/03/2020
 
+  - [TLDR](#tldr)
+
+# TLDR
+
+Here, we assayed inactivated viral lysate (ATCC), purified CoV genomic
+RNA (ATCC), and synthetic Twist CoV RNA in the background of human cell
+line lysate and human NP swab lysate with the N1 and S2 primers. We
+included the RPP3 primers at 100 nM naked primer and 50 nM primer with
+adaptor. We also included a synthetic RNA spike-in with CoV priming
+sites to normalize to. This analysis file is incomplete (and wrong in
+some sections). For a detailed analysis of this run in the human cell
+line lysate please look at the example file. The synthetic spike-in
+cleaned up the data a lot. The NP swab lysate failed for some reason, we
+suspect the lysate was inactivated incorrectly as NP swab lysate has
+worked for RT-QPCR in our hands reliabely.
+
 Let’s first just look at reads per well across our plates:
 
 ![](Figs/unnamed-chunk-4-1.png)<!-- -->

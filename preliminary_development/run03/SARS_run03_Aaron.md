@@ -3,6 +3,24 @@ SARS-CoV-2 platform run 3 analysis
 Aaron
 04/02/2020
 
+  - [TLDR](#tldr)
+
+# TLDR
+
+This was our third run that we ran in parallel with run 2. Just like run
+1, we assayed synthetic Twist SARS-CoV-2 RNA molecules from 100,000
+copies to 1 copy per well (and negative controls) in the background of
+human cell line (HEK293T) lysate. In each well we amplified CoV RNA with
+either the N1 or S2 primer set at 400 nM and human RNase P with 100 nM
+‘naked’ primers (no adaptors) and 50 nM primers with adaptor as a way
+to limit reads from RNase P and decrease the propensity for primer dimer
+formation. However, different from run 1 we only amplified for 40 cycles
+(gels were a tad messy from run 1 and a looked a lot cleaner here) and
+used serial dilution to add the Twist RNA instead of our Tecan D300e.
+Overall, results looked a lot cleaner - especially for the S2 set and it
+looks like we can see signal down to \< 10 molecules. We ran this with a
+Miseq v3 kit.
+
 Let’s first just look at reads per well across our plates:
 
 ![](Figs/unnamed-chunk-4-1.png)<!-- -->
