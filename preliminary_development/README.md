@@ -4,7 +4,7 @@ respective \*.Rmd file into an \*.md file, which can be viewed directly on
 GitHub.
 
 If you would like to use the SwabSeq pipeline
-to process the data from these runs from beginning to end, please let us know
-and we will provide the fastq files.
+to process the data from these runs from beginning to end, you can access the
+demultiplexed fastq's below:
 
-
+https://drive.google.com/drive/folders/1nyYIjJ4Qt5svsoGnlIZoW5b-0LlG9bxv
