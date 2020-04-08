@@ -21,6 +21,7 @@ If you are interested in running the computational portion of SwabSeq, see the w
 
 - [Installation](https://github.com/octantbio/swab-seq/wiki/Installation)
 - [Running the Analysis Pipeline](https://github.com/octantbio/swab-seq/wiki/Analysis-Details)
+- [Barcode Map Spec](https://github.com/octantbio/swab-seq/wiki/Barcode-Map-Spec)
 - [Plate Map Spec](https://github.com/octantbio/swab-seq/wiki/Plate-Map-Spec)
 
 ## Example Analysis
