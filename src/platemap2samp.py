@@ -56,13 +56,14 @@ def prompt_header():
     name = input('\n\nName: ')
     experiment = input('Experiment Name: ')
     date = input('Date: ')
-    instrument = input('Instrument (MiSeq,NextSeq,HiSeq): ')
-    if instrument not in ['MiSeq', 'NextSeq', 'Hiseq']:
-      while instrument not in ['MiSeq', 'NextSeq', 'Hiseq']:
-        instrument = input('Instrument must be: MiSeq, NextSeq, or Hiseq.\nTry again: ')
+    instrument_types_i5_fwd = ['MiSeq', 'HiSeq 2X00', 'NovaSeq']
+    instrument_types_i5_rev = ['iSeq', 'MiniSeq', 'NextSeq', 'HiSeq >3000']
+    instrument = input(f'Instrument ({",".join(instrument_types_i5_fwd+instrument_types_i5_rev)}): ')
+    while instrument not in instrument_types_i5_fwd+instrument_types_i5_rev:
+        instrument = input(f'Instrument must be in {instrument_types_i5_fwd+instrument_types_i5_rev}.\nTry again: ')
 
     # set reverse compliment flag depending on instrument
-    if instrument == 'NextSeq':
+    if instrument in instrument_types_i5_rev:
         rc = True
     else:
         rc = False
