@@ -1,0 +1,81 @@
+```{r}
+library(writexl)
+library(magrittr)
+library(tidyverse)
+
+wide.primers <- read_tsv(
+    './frozen-data/frozen-primer-set.tsv', 
+    col_names = c('f_idx', 'f_primer', 'set', 'r_idx', 'r_primer')
+  ) %>% 
+  group_by(set) %>%
+  mutate(pair_num = seq(1536)) %>%
+  ungroup()
+  
+# randomly sample 384 pairs per group
+# save them for future experiments
+# also add the pair number so we can track them post split
+set.seed(3308004)
+sample.set <- wide.primers %>%
+  group_by(set) %>%
+  sample_n(384) %>%
+  ungroup() 
+
+# save 384 well index
+well.idx <- expand_grid(col=LETTERS[1:16], row=seq(24)) %>%
+  mutate(well = paste0(col, row)) %$%
+  well
+
+# tidy them up and output into an excel file
+out.384 <- sample.set %>%
+  group_by(set) %>%
+  mutate(`Well Position` = well.idx) %>%
+  pivot_longer(
+    cols = c(-set, -`Well Position`, -pair_num),
+    names_to = c('orientation', '.value'),
+    names_sep = "_"
+  ) %>%
+  ungroup() %>%
+  unite(Name, set, pair_num, orientation, idx, sep="_", remove = FALSE) %>%
+  unite(out_name, set, orientation, sep = "_") %>%
+  select(out_name, Name, `Well Position`, Sequence = primer) 
+
+# do the actual writing (foo is a dummy var)
+foo <- out.384 %>%
+  nest(data = c(-out_name))  %>%
+  mutate(foo = walk2(out_name, data, ~write_csv(.y, path=paste0(.x, '.csv'))))
+```
+
+We also want a set of 24 oligos to prototype (excluding N1). Dump these into a 96-well plate
+
+```{r, subset-96}
+# remember drop the N1 set here.
+set.seed(42)
+small.samp <- wide.primers %>%
+  filter(set != 'N1') %>%
+  anti_join(sample.set) %>%
+  group_by(set) %>%
+  sample_n(24) %>%
+  ungroup()
+
+# make the 96 well index
+well.idx.96 <- expand_grid(col=LETTERS[1:8], row=seq(12)) %>%
+  mutate(well = paste0(col, row)) %$%
+  well
+
+out.24 <- small.samp %>%
+  pivot_longer(
+    cols = c(-set, -pair_num),
+    names_to = c('orientation', '.value'),
+    names_sep = "_"
+  ) %>%
+  arrange(set, orientation) %>%
+  mutate(`Well Position` = well.idx.96) %>%
+  unite(Name, set, pair_num, orientation, idx, sep="_", remove = FALSE) %>%
+  unite(out_name, set, orientation, sep = "_") %>%
+  mutate(out_name = paste0(out_name, '_24')) %>%
+  select(out_name, Name, `Well Position`, Sequence = primer) 
+
+foo <- out.24 %>%
+  nest(data = c(-out_name))  %>%
+  mutate(foo = walk2(out_name, data, ~write_csv(.y, path=paste0(.x, '.csv'))))
+```

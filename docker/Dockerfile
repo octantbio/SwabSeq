@@ -30,7 +30,8 @@ RUN install2.r --error \
     speedglm \
     sandwich \
     ggbeeswarm \
-    BiocManager
+    BiocManager \
+    writexl
 
 # Install github packages
 RUN installGithub.r \
@@ -72,8 +73,11 @@ RUN conda update -y conda \
     scikit-learn \
     ipython \
     jupyterlab \
+    python-levenshtein \
     openpyxl \
     xlrd
+
+RUN pip install primer3-py
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # other utils
