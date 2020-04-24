@@ -42,7 +42,7 @@ pipeline/%/conditions.csv: data/seq-runs/%/SampleSheet.csv pipeline/%/bc-map.csv
 pipeline/%/starcode.csv: data/seq-runs/% pipeline/%/conditions.csv
 	@echo "Counting BCs for all fastq's in $<"
 	@parallel --header : --colsep "," \
-		zcat $</"{Sample_ID}"_S*_R1_001.fastq.gz \
+		zcat $</"{Sample_ID}"*_S*_R1_001.fastq.gz \
 		\| awk -v bc_len="{bc_len}" -f src/count-bcs.awk \
 		\| starcode -d2 -t1 --sphere --print-clusters 2> /dev/null \
 		\| python src/tidy-star.py \
