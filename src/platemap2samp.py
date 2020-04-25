@@ -9,6 +9,7 @@ import sys
 import argparse
 import itertools
 import pandas as pd
+import numpy as np
 from collections import defaultdict
 
 import plate_maps as pm
@@ -142,8 +143,8 @@ def check_i5_i7_vars(plate_maps):
     if i5_suffixes != i7_suffixes:
         raise ValueError(f"i5 and i7 index suffixes must be the same. Currently they are {i5_suffixes} for the i5's and {i7_suffixes} for the i7's")
 
-    # Create new plate map variable list that replaces all i5 and i7 variables with just 'i5' and 'i7',
-    # for required variable checking downstream
+    # Create new plate map variable list that replaces all i5 and i7 variables
+    # with just 'i5' and 'i7', for required variable checking downstream
     new_vars = [x for x in plate_maps.keys() if not (x.startswith('i5') or x.startswith('i7'))] + ['i5', 'i7']
     
     return new_vars, sorted(list(i5_suffixes))
@@ -156,17 +157,22 @@ def expand_samplesheet(df, idx_suff):
     i5_cols = [f'i5_{x}' for x in idx_suff]
     i7_cols = [f'i7_{x}' for x in idx_suff]
 
-    i5_expanded_df = df.melt(id_vars = 'Sample_ID', value_vars = i5_cols, value_name = 'i5', var_name = '__idx_id__')
+    i5_expanded_df = df.melt(id_vars = ['Sample_ID', 'Plate_ID', 'Sample_Well'], value_vars = i5_cols, value_name = 'i5', var_name = '__idx_id__')
     i5_expanded_df['__idx_id__'] = [x.split('_')[1] for x in i5_expanded_df['__idx_id__']]
     
-    i7_expanded_df = df.melt(id_vars = 'Sample_ID', value_vars = i7_cols, value_name = 'i7', var_name = '__idx_id__')
+    i7_expanded_df = df.melt(id_vars = ['Sample_ID', 'Plate_ID', 'Sample_Well'], value_vars = i7_cols, value_name = 'i7', var_name = '__idx_id__')
     i7_expanded_df['__idx_id__'] = [x.split('_')[1] for x in i7_expanded_df['__idx_id__']]
 
+    # If there is a mixture of wells with single and multiple i5/i7 pairs,
+    # remove any duplicated pairs within a well.  (Somewhere else throw an
+    # error if the indices do not define a unique row in the SampleSheet)
+    i5_i7_expanded_df = pd.merge(i5_expanded_df, i7_expanded_df)
+    i5_i7_expanded_df = i5_i7_expanded_df[~i5_i7_expanded_df.duplicated(['Plate_ID', 'Sample_Well', 'i5', 'i7'])
+
     df_exp = df.drop(i5_cols + i7_cols, axis = 'columns') \
-        .merge(i5_expanded_df) \
-        .merge(i7_expanded_df)
+        .merge(i5_i7_expanded_df)
     
-    df_exp['Sample_ID'] = df_exp['Sample_ID'] + '_' + df_exp['__idx_id__']
+    df_exp['Sample_ID'] = df_exp['Sample_ID'] + '-' + df_exp['__idx_id__']
     df_exp.drop('__idx_id__', axis = 'columns', inplace = True)
 
     return df_exp
@@ -213,6 +219,12 @@ if __name__ == '__main__':
     # Expand the df to accommodate multiple i5/i7 pairs per well, if necessary
     if len(index_suffixes) > 0:
         out_df = expand_samplesheet(out_df, index_suffixes)
+
+    # Check to make sure each i5/i7 combination uniquely defines a row
+    duplicated_index_rows = np.where(out_df.duplicated(['i5', 'i7'])).tolist()
+    if len(duplicated_index_rows) > 0:
+        dup_idx_err_str = 'i5/i7 pairs do not define unique rows in the SampleSheet! Offending duplicated rows:\n{}'.format(', '.join(duplicated_index_rows))
+        raise ValueError(dup_idx_err_str)
 
     sample_header, rc = prompt_header()
 

@@ -31,12 +31,16 @@ pipeline/%/bc-map.csv:
 	@cp data/barcode-map.csv $@
 
 # grab relevant section of samplesheet (make sure to catch windows return)
+# Also collapse the SampleSheet so there's only one line per well - there will be
+# multiple lines per well if there are multiple i5/i7 pairs per well.
 pipeline/%/conditions.csv: data/seq-runs/%/SampleSheet.csv pipeline/%/bc-map.csv
 	@echo "Parsing $<"
 	@python src/strip-windows.py $< \
 		| awk '/Sample_ID/{seen=1} seen{print}' \
+		| Rscript src/collapseSampleSheet.R \
+		2> $(@:.csv=.err) \
 		| Rscript src/bc-lengths.R $(word 2, $^) $@ \
-		2> $(@:.csv=.err)
+		2>> $(@:.csv=.err)
 
 # Run starcode on each fastq, using gnu parallel to parse the conditions for barcode length
 pipeline/%/starcode.csv: data/seq-runs/% pipeline/%/conditions.csv
