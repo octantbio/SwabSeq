@@ -139,6 +139,15 @@ RUN mkdir -p /usr/include/sys \
     && make install \
     && rm -r /tmp/*
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# mlr
+
+WORKDIR /usr/local/bin
+RUN set -u; \
+    wget "https://github.com/johnkerl/miller/releases/download/v5.7.0/mlr.linux.x86_64" \
+    && chmod 0777 mlr.linux.x86_64 \
+    && mv mlr.linux.x86_64 mlr
+
 #===============================================================================
 # final touches
 
