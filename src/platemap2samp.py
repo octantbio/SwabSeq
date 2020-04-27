@@ -220,7 +220,7 @@ if __name__ == '__main__':
         out_df = expand_samplesheet(out_df, index_suffixes)
 
     # Check to make sure each i5/i7 combination uniquely defines a row
-    duplicated_index_rows = np.where(out_df.duplicated(['i5', 'i7'])).tolist()
+    duplicated_index_rows = np.where(out_df.duplicated(['i5', 'i7']))[0].tolist()
     if len(duplicated_index_rows) > 0:
         dup_idx_err_str = 'i5/i7 pairs do not define unique rows in the SampleSheet! Offending duplicated rows:\n{}'.format(', '.join(duplicated_index_rows))
         raise ValueError(dup_idx_err_str)
