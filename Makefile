@@ -5,7 +5,7 @@ SHELL := /bin/bash
 # VARIABLES
 
 # sequencing run ids
-RUNS := $(shell find data/seq-runs -maxdepth 1 -mindepth 1 -type d -exec basename {} \;)
+RUNS := $(shell find -L data/seq-runs -maxdepth 1 -mindepth 1 -type d -exec basename {} \;)
 
 #===============================================================================
 # RECIPIES
