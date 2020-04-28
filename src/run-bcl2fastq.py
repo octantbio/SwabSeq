@@ -32,13 +32,7 @@ if __name__ == '__main__':
         else:
             mask.append(f'Y{read.attrib["NumCycles"]}')
 
-    bcl2fastq = f'bcl2fastq --runfolder-dir {args.seq_folder} --output-dir {args.out_folder} --create-fastq-for-index-reads --use-bases-mask {",".join(mask)} --processing-threads {args.threads} --no-lane-splitting'
-
-    # move SampleSheet.csv if present
-    sample_sheet = input_path / "SampleSheet.csv"
-    if sample_sheet.is_file():
-        sample_sheet_bak = sample_sheet.parent / ("bak." + sample_sheet.name)
-        shutil.move(sample_sheet, sample_sheet_bak)
+    bcl2fastq = f'bcl2fastq --runfolder-dir {args.seq_folder} --output-dir {args.out_folder} --create-fastq-for-index-reads --use-bases-mask {",".join(mask)} --processing-threads {args.threads} --no-lane-splitting --sample-sheet /dev/null'
 
     # run bcl2fastq
     p = subprocess.Popen(shlex.split(bcl2fastq))
