@@ -173,29 +173,12 @@ we can see that the difference in reads comes from the sample prep - lysate from
 Since we know what barcodes to expect in each well, we can add explicit zeros to barcodes that drop out.
 
 ```{r}
-explicit.zeros <- function(df, bc.map) {
-  # take only assays and targets from the current run
-  # assumes df has been joined with condition sheet
-  bc.map %>%
-    filter(
-      bc_set %in% unique(df$bc_set),
-    ) %>%
-    left_join(df, by = c('sequence', 'bc_set')) %>%
-    replace_na(list(Count = 0))
-}
-
 # drop the centroid column as it's not needed
 # coerce Count to integer to avoid weird scientic notation behavior in format_csv
-df <- counts %>%
-  select(-Centroid) %>%
-  rename(sequence=barcode) %>% 
-  inner_join(select(cond, Sample_ID, bc_set), by = 'Sample_ID') %>% 
-  group_by(Sample_ID) %>%
-  group_nest() %>%
-  mutate(foo = future_map(data, ~explicit.zeros(.x, bc.map))) %>%
-  select(-data) %>%
-  unnest(foo) %>%
-  inner_join(cond) %>%
+df <- cond %>%
+  left_join(bc.map) %>%
+  left_join(counts %>% select(Sample_ID, sequence=barcode, Count)) %>%
+  replace_na(list(Count = 0)) %>%
   mutate(
     Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS)),
     Col = str_sub(Sample_Well, 2),
