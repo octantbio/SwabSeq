@@ -51,6 +51,6 @@ if __name__ == '__main__':
     if len(fastqs) == 4:
         fastq_order.append(fastqs['R2'])
 
-    kallisto = f'kallisto bus -x SwabSeq --index {args.index} --threads {args.threads} --output-dir {out_dir}'
+    kallisto = f'kallisto bus -x SwabSeq10 --index {args.index} --threads {args.threads} --output-dir {out_dir}'
     p = subprocess.Popen(shlex.split(kallisto) + fastq_order)
     exit_code = p.wait()
