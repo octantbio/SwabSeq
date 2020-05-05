@@ -123,13 +123,18 @@ pipeline/%/whitelist.txt: pipeline/%/conditions.csv
 	    $< \
 	    > $@
 
+# output raw kallisto counts for debugging
+pipeline/%/kallisto.counts.bus: pipeline/%/output.bus
+	@echo "Generating Kallisto Counts for $<"
+	@bustools sort --threads 2 -o $@ $< 2> $(@:.bus=.err) \
+	    && bustools text -o $(@:.bus=.tsv) $@ 2>> $(@:.bus=.err)
+
 # bustools pipeline to demux and count
-pipeline/%/kb.tsv: pipeline/%/output.bus pipeline/%/whitelist.txt
-	@echo "Using bustools to demultiplex and count $<"
-	@bustools sort --threads 2 --pipe --temp $(@D)/tmp $< \
-	    | bustools correct --pipe --whitelist $(lastword $^) - \
-	    | bustools sort --threads 2 --pipe --temp $(@D)/tmp2 - \
-	    | bustools text --pipe - \
+pipeline/%/kb.tsv: pipeline/%/kallisto.counts.bus pipeline/%/whitelist.txt
+	@echo "Using bustools to count barcodes in $(lastword $^)"
+	@bustools correct --pipe --whitelist $(lastword $^) $< 2>> $(@:.tsv=.err) \
+	    | bustools sort --threads 2 --pipe --temp $(@D)/tmp2 - 2>> $(@:.tsv=.err) \
+	    | bustools text --pipe - 2>> $(@:.tsv=.err) \
 	    > $@
 
 # dummy for example
