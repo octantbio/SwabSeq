@@ -1,0 +1,306 @@
+---
+title: "Run06 - Demux Issues"
+author: "Nate"
+date: "04/28/2020"
+output: 
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width=12, 
+  fig.height=8, 
+  fig.path='figs/run6-demux',
+  echo=TRUE, 
+  warning=FALSE, 
+  message=FALSE
+)
+```
+
+Here we have the i7/i5 index pairs that Kallisto determined to align to our expected sequences (S2/S2_Spike/Rpp30). This consisted of ~30% of the total reads (in line with having ~70% PhiX).
+
+```{r, echo=FALSE}
+library(furrr)
+library(magrittr)
+library(tidyverse)
+
+options(future.fork.enable = TRUE)
+plan(multicore)
+
+theme_pub <- function(base_size = 11, base_family = "") {
+  # based on https://github.com/noamross/noamtools/blob/master/R/theme_nr.R
+  # start with theme_bw and modify from there!
+  theme_bw(base_size = base_size, base_family = base_family) +# %+replace%
+    theme(
+      # grid lines
+      panel.grid.major.x = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.y = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.background   = element_blank(),
+      
+      # axis options
+      axis.ticks.y   = element_blank(),
+      axis.title.x   = element_text(size=rel(2), vjust=0.25),
+      axis.title.y   = element_text(size=rel(2), vjust=0.35),
+      axis.text      = element_text(color="black", size=rel(1)),
+      
+      # legend options
+      legend.title    = element_text(size=rel(1.5)),
+      legend.key      = element_rect(fill="white"),
+      legend.key.size = unit(1, "cm"),
+      legend.text     = element_text(size=rel(1.5)),
+      
+      # facet options
+      strip.text = element_text(size=rel(2)),
+      strip.background = element_blank(),
+      
+      # title options
+      plot.title = element_text(size=rel(2.25), vjust=0.25, hjust=0.5)
+    )
+}
+theme_set(theme_pub(base_size=8))
+
+
+kallisto <- read_tsv(
+  '../../pipeline/200426_M05737_0145_000000000-J46H8/kallisto-counts.tsv',
+  col_names = c('i7i5', 'foo', 'ref', 'counts')
+) %>%
+  mutate(
+    i7 = str_sub(i7i5, end=10),
+    i5 = str_sub(i7i5, start=11)
+  )
+
+bc.map <- read_csv(
+  '../../pipeline/200426_M05737_0145_000000000-J46H8/transcripts.txt', 
+  col_names = 'amplicon'
+) %>%
+  mutate(ref = seq(nrow(.)) - 1)
+
+samp.sheet <- read_csv('../../pipeline/200426_M05737_0145_000000000-J46H8/conditions.csv')
+```
+
+## Quick Index Check
+
+Let's first check to make sure our actual indices in the SampleSheet are the ones we ordered. Recall, we have to reverse compliment the i7 index to match the output of the sequencer. Also, the i7 index will be associaded with the `f_idx` or `r_idx` depending on the library (a minor hitch from the original design)
+
+```{r, primer-check_sample-sheet, message=TRUE}
+revcomp <- function(string){
+  chartr('ATGC', 'TACG', string) %>% 
+    stringi::stri_reverse() %>%
+    return()
+}
+
+primer.sets <- read_tsv('../../pipeline/200426_M05737_0145_000000000-J46H8/primer-order.tsv')
+
+# check that our sample sheet has the ordered sets
+primer.sets %>%
+  filter(set == 'RPP30') %>%
+  mutate(
+    index = revcomp(f_idx),
+    index2 = r_idx
+  ) %>%
+  inner_join(samp.sheet) %>%
+  nrow()
+
+primer.sets %>%
+  filter(set == 'S2') %>%
+  mutate(
+    index = revcomp(r_idx),
+    index2 = f_idx
+  ) %>%
+  inner_join(samp.sheet) %>%
+  nrow()
+```
+
+Yes - both have 384 rows and sample_id ends in one number.
+
+## Kallisto Data
+
+The `kallisto|bustools` pipeline operates a little differently than what we are used to. In broad strokes, it:
+
+1. aligns all of the reads to a reference (in this case our expected amplicons)
+2. treats i7/i5 as a "barcode" and demultiplexes based on that
+
+The result of the alignment (Step 1) is as follows:
+
+```{r, kallisto-out, message=TRUE}
+head(kallisto)
+```
+
+a dataframe with `i7i5` "barcode", a dummy column, what that index aligns to (`ref`), the associated counts, and the i5/i7 indices. We can filter these counts down to our expected indices with `bustools` as well, accounting for 1 error in the i7 and i5 individually with.
+
+```{r, kallisto-collapse, MESSAGE=TRUE}
+kb <- read_tsv(
+  '../../pipeline/200426_M05737_0145_000000000-J46H8/kb.tsv',
+  col_names = c('i7i5', 'foo', 'ref', 'counts')
+)
+
+kb %$%
+  sum(counts)
+```
+
+We can see that only 600k / 6mm correspond to our expected i7/i5 pairs... 
+
+## Missing Indices
+
+So what are our most common indices? Let's try joining on our i7/i5 indices individually. A barcode hopping event will result in an i7/i5 combo with different "pair" numbers. (Recall, our primers are designed with i7/i5 index pairs).
+
+First let's get our primer sets oriented properly
+
+```{r, i7-i5_setup}
+# what pairs are we seeing most often?
+# S2    - i5:F, i7:R
+# RPP30 - i7:F, i5:R
+# we must rev-comp S2_R and RPP30_F
+foo <- primer.sets %>%
+  filter(set == 'RPP30') %>%
+  mutate(
+    index = revcomp(f_idx),
+    index2 = r_idx
+  ) 
+
+bar <- primer.sets %>%
+  filter(set == 'S2') %>%
+  mutate(
+    index = revcomp(r_idx),
+    index2 = f_idx
+  ) 
+
+primer.orient <- bind_rows(foo, bar)
+
+i7 <- bind_rows(foo, bar) %>%
+  select(i7_set = set, i7_pair = pair_num, i7 = index)
+
+i5 <- bind_rows(foo, bar) %>%
+  select(i5_set = set, i5_pair = pair_num, i5 = index2)
+```
+
+Now we can join them onto the raw kallisto output
+
+```{r, i7-i5_join, MESSAGE=TRUE}
+i7i5.join <- kallisto %>%
+  left_join(i7) %>%
+  left_join(i5) 
+
+i7i5.join %>%
+  head(10)
+```
+
+We can see that indeed, we are finding our designed indices. Let's walk through the cases above:
+
+- Row 1: The i5 index exactly matches our designed i5 index (pair number 787)
+- Row 2: Both i7 and i5 exactly their designed index (pair number 1373)
+- Row 8: The i7 index exactly matches our designed i7 index (pair number 1523)
+- Row 10: Neither index exactly matches our designs
+
+I think the cases where i7 or i5 match but their pair does not are instructive. Since the read barcode does not match something in our design what are they? If they are close to the designed pair (e.g. 1-2 errors away) it could just be a sequencing error. Higher distances point to barcode hopping or cryptic sequences.
+
+## Index Distance Calc
+
+### i7 Distance
+
+Let's first look at the missing i7's. We'll join on the expected i7 index and calculate the Levenshtein distance away from the i7 index from the sequencer.
+
+```{r, missing-i7}
+missing.i7 <- i7i5.join %>%
+  filter(is.na(i7_set), !is.na(i5_set)) %>%
+  select(i7i5, ref, counts, i7, i5, set=i5_set, pair_num = i5_pair)
+
+# note using future map here as the lev distance is a bit slow
+i7.dists <- primer.orient %>%
+  select(set, pair_num, index, i5=index2) %>%
+  inner_join(missing.i7) %>%
+  mutate(dist = future_map2_dbl(index, i7, ~adist(.x, .y) %>% as.numeric())) 
+```
+
+Let's see how the distance between the actual and expected i7 changes as a function of reads
+
+```{r, actual-vs-expected-i7, fig.width=9, fig.height=3.33}
+i7.dists %>%
+  filter(counts > 1) %>%
+  ggplot(aes(x=counts, y=dist)) +
+  geom_point(alpha=0.1) +
+  geom_smooth(se=F) +
+  scale_y_continuous(breaks = seq(10)) +
+  scale_x_log10() +
+  annotation_logticks(sides = 'b') +
+  labs(
+    x = 'Reads',
+    y = 'Dist(Actual i7, Expected i7)'
+  )
+```
+
+There's a clear trend that species with many reads (e.g. > 1000) the distance between the expected i7 sequence and the actual i7 sequence is 2 (note we're dropping singletons). Any species with a `dist > 3` is likely an index hop as we designed our indices to be a minimum of 3 apart.
+
+### i5 Index
+
+Let's repeat for the i5
+
+```{r, missing-i5, fig.width=9, fig.height=3.33}
+missing.i5 <- i7i5.join %>%
+  filter(is.na(i5_set), !is.na(i7_set)) %>%
+  select(i7i5, ref, counts, i7, i5, set=i7_set, pair_num = i7_pair)
+
+# note using future map here as the lev distance is a bit slow
+i5.dists <- primer.orient %>%
+  select(set, pair_num, i7=index, index2) %>%
+  inner_join(missing.i5) %>%
+  mutate(dist = future_map2_dbl(index2, i5, ~adist(.x, .y) %>% as.numeric())) 
+
+i5.dists %>%
+  filter(counts > 1) %>%
+  ggplot(aes(x=counts, y=dist)) +
+  geom_point(alpha=0.1) +
+  geom_smooth(se=F) +
+  scale_y_continuous(breaks = seq(10)) +
+  scale_x_log10() +
+  annotation_logticks(sides = 'b') +
+  labs(
+    x = 'Reads',
+    y = 'Dist(Actual i5, Expected i5)'
+  )
+```
+
+## Discrepancies
+
+### i7 Off by One
+
+Looking at the last base of the most common missing i7's we can see that they all end in A!
+
+```{r, i7-issue}
+i7.dists %>%
+  arrange(-counts) %>%
+  select(set, pair_num, counts, expected=index, actual=i7, dist) %>%
+  mutate(last_actual = str_sub(actual, start=-1)) %>%
+  head(n=10)
+```
+
+We can also see this on the SeqLogo
+
+```{r, i7-seq-logo, fig.width=9, fig.height=4.5}
+if(!require(ggseqlogo)){
+  install.packages("ggseqlogo")
+  library(ggseqlogo)
+}
+
+kallisto %>%
+  uncount(counts) %$%
+  ggseqlogo(i7, method='prob')
+```
+
+The last base is overwhelmingly A.
+
+### i5 Demux Issues
+
+Lets plot a seqlogo of the i5 index, using all of the data
+
+```{r, i5-seq-logo, fig.width=9, fig.height=4.5}
+kallisto %>%
+  uncount(counts) %$%
+  ggseqlogo(i5, method='prob')
+```
+
+We can see that at base 6 we have ~75% chance of calling a G! Ideally the bases would be even throughout the index read. This likely explains the large number of i5 indices with a distance of 1 away from expectation. 

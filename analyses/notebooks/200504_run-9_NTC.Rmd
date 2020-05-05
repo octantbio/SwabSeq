@@ -1,0 +1,204 @@
+---
+title: "Run09 - No Template Control Plate"
+author: "Nate"
+date: "05/04/2020"
+output: 
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width=12, 
+  fig.height=8, 
+  fig.path='figs/run9-NTC',
+  echo=TRUE, 
+  warning=FALSE, 
+  message=FALSE
+)
+```
+
+```{r, echo=FALSE}
+# plotting
+library(ggbeeswarm) # <- geom_quasirandom
+
+# tidyverse
+library(magrittr)
+library(tidyverse)
+
+# ------------------------------------------------------------------------------------
+# style plots
+
+theme_pub <- function(base_size = 11, base_family = "") {
+  # based on https://github.com/noamross/noamtools/blob/master/R/theme_nr.R
+  # start with theme_bw and modify from there!
+  theme_bw(base_size = base_size, base_family = base_family) +# %+replace%
+    theme(
+      # grid lines
+      panel.grid.major.x = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.y = element_line(colour="#ECECEC", size=0.5, linetype=1),
+      panel.background   = element_blank(),
+      
+      # axis options
+      axis.ticks.y   = element_blank(),
+      axis.title.x   = element_text(size=rel(2), vjust=0.25),
+      axis.title.y   = element_text(size=rel(2), vjust=0.35),
+      axis.text      = element_text(color="black", size=rel(1)),
+      
+      # legend options
+      legend.title    = element_text(size=rel(1.5)),
+      legend.key      = element_rect(fill="white"),
+      legend.key.size = unit(1, "cm"),
+      legend.text     = element_text(size=rel(1.5)),
+      
+      # facet options
+      strip.text = element_text(size=rel(2)),
+      strip.background = element_blank(),
+      
+      # title options
+      plot.title = element_text(size=rel(2.25), vjust=0.25, hjust=0.5)
+    )
+}
+theme_set(theme_pub(base_size=8))
+
+# ------------------------------------------------------------------------------------
+# loading
+
+nextseq <- '200504_NB552046_0043_AHVGLFBGXF'
+
+# raw kallisto counts
+kallisto.counts <- read_tsv(str_c('../../pipeline/', nextseq, '/kallisto.counts.tsv'), col_names = c('i7i5', 'foo', 'ref', 'counts')) %>%
+  mutate(
+    index =  str_sub(i7i5, end=10),
+    index2 = str_sub(i7i5, start=11)
+  )
+
+# reads aligning to our library
+counts <-read_tsv(str_c('../../pipeline/', nextseq, '/kb.tsv'), col_names = c('i7i5', 'foo', 'ref', 'counts')) %>%
+  mutate(
+    index =  str_sub(i7i5, end=10),
+    index2 = str_sub(i7i5, start=11)
+  )
+
+bc.map <- read_tsv(str_c('../../pipeline/', nextseq, '/transcripts.txt'), col_names = 'amplicon') %>%
+  mutate(ref = 1:n() - 1) %>%
+  filter(str_detect(amplicon, 'N1', negate=TRUE)) %>%
+  mutate(target = if_else(str_detect(amplicon, 'S2'), 'S2', 'RPP30'))
+
+cond <- read_csv(str_c('../../pipeline/', nextseq, '/conditions.csv')) %>%
+  mutate(target = if_else(str_sub(Sample_ID, -1, -1) == '1', 'S2', 'RPP30'))
+```
+
+## Read Per Well Check
+
+First, let's make sure the expected counts per well look correct
+
+```{r, count-per-well, fig.width=9, fig.height=3.33}
+counts %>%
+  inner_join(bc.map) %>%
+  inner_join(cond) %>%
+  count(Plate_ID, Sample_Well, wt=counts, name='well_total') %>%
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(well_total))) +
+  geom_tile() +
+  coord_equal() +
+  facet_wrap(~Plate_ID) +
+  scale_fill_viridis_c(option='plasma')
+```
+
+### Split out By Amplicon
+
+```{r, rpw-amplicon, fig.width=9, fig.height=4.5}
+counts %>%
+  inner_join(bc.map) %>%
+  inner_join(cond) %>%
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS[1:16])),
+    Col = str_sub(Sample_Well, 2)
+  ) %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(counts + 1))) +
+  geom_tile() +
+  coord_equal() +
+  facet_wrap( ~ amplicon) +
+  scale_fill_viridis_c(option='plasma')
+```
+
+## Explicit Zeros
+
+Since we know what barcodes to expect in each well, we can add explicit zeros to barcodes that drop out.
+
+```{r, explicit-zero-check, fig.width=9, fig.height=4.5}
+df <- left_join(cond, bc.map)  %>%
+  left_join(counts) %>%
+  select(-i7i5) %>%
+  replace_na(list(counts = 0)) %>%
+  mutate(
+    Row = factor(str_sub(Sample_Well, 1, 1), levels = rev(LETTERS)),
+    Col = str_sub(Sample_Well, 2)
+  ) 
+
+df %>%
+  ggplot(aes(x=Col, y=Row, fill=log10(counts + 1))) +
+  geom_tile() +
+  coord_equal() +
+  facet_wrap(~ amplicon) +
+  scale_fill_viridis_c(option='plasma')
+```
+
+### Grab Nulls and Well Totals
+
+We need to get our amplicon, spike, and Rpp30 reads into separate columns. From that, we can grab our nulls.
+
+```{r, nulls-and-wells}
+well.total <- df %>%
+  count(Row, Col, wt=counts, name='Well_Total')
+
+# because our data is pretty simple we can just modify the nulls in place
+df.wide <- df %>%
+  filter(amplicon == 'RPP30' | str_detect(amplicon, 'S2')) %>%
+  mutate(amplicon = case_when(amplicon == 'RPP30' ~ 'RPP30',
+                              str_detect(amplicon, 'spike') ~ 'Spike',
+                              TRUE ~ 'RNA')
+  ) %>%
+  select(Row, Col, RNA_copies, amplicon, counts) %>%
+  spread(amplicon, counts)
+```
+
+# LoD
+
+```{r, ntc-dist, fig.width=5, fig.height=5}
+df.wide %>%
+  inner_join(well.total) %>%
+  ggplot(aes(x=factor(RNA_copies), y=(RNA+1)/(Spike+1))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_quasirandom(aes(color=log10(Well_Total))) +
+  scale_y_log10() +
+  scale_color_viridis_c(option = 'plasma') +
+  labs(
+    x = 'NTC Well',
+    title = 'S2/Spike-in for NTC Wells'
+  )
+```
+
+```{r, ratio-vs-reads, fig.width=6, fig.height=4}
+df.wide %>%
+  inner_join(well.total) %>%
+  mutate(RNA_copies = if_else(RNA_copies == 0, 0.1, RNA_copies)) %>%
+  ggplot(aes(y=(RNA+1)/(Spike+1), x=Well_Total)) +
+  geom_point(pch=21) +
+  geom_smooth(se=F, method='lm') +
+  scale_y_log10()  +
+  scale_x_log10() +
+  annotation_logticks() +
+  labs(
+    x = 'Reads per Well',
+    title = 'S2/Spike-in vs Reads per Well'
+  )
+```
+
