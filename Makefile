@@ -101,12 +101,14 @@ pipeline/%/demux-kallisto/demux: data/seq-runs/%
 # 3) Pseudo-align:
 # ----------------
 # run-kallisto.py takes: kallisto index, out_dir
+# TODO -  dynamically set index length
 pipeline/%/output.bus: pipeline/%/demux-kallisto/demux data/expected-amplicons.idx
 	@echo "Pseudo-aligning reads with kallisto in $(<D)"
 	@mkdir -p $(@D)
 	@python src/run-kallisto.py \
 	    --index $(lastword $^) \
 	    --out-dir $(@D) \
+	    --index-len 10 \
 	    --threads 8 \
 	    $(<D)/*.fastq.gz \
 	    2> $(@D)/kallisto.err
@@ -132,7 +134,7 @@ pipeline/%/kallisto.counts.bus: pipeline/%/output.bus
 # bustools pipeline to demux and count
 pipeline/%/kb.tsv: pipeline/%/kallisto.counts.bus pipeline/%/whitelist.txt
 	@echo "Using bustools to count barcodes in $(lastword $^)"
-	@bustools correct --pipe --whitelist $(lastword $^) $< 2>> $(@:.tsv=.err) \
+	@bustools correct --split --pipe --whitelist $(lastword $^) $< 2>> $(@:.tsv=.err) \
 	    | bustools sort --threads 2 --pipe --temp $(@D)/tmp2 - 2>> $(@:.tsv=.err) \
 	    | bustools text --pipe - 2>> $(@:.tsv=.err) \
 	    > $@

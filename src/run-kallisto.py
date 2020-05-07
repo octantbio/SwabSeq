@@ -23,6 +23,12 @@ if __name__ == '__main__':
                         required=True,
                         dest='out_dir',
                         help='path to output folder')
+    parser.add_argument('-l', '--index-len',
+                        type=int,
+                        dest='index_len',
+                        choices=[8,10],
+                        default=10,
+                        help='length of i7/i5 index (10 default)')
     parser.add_argument('-t', '--threads',
                         type=int,
                         default=1,
@@ -43,6 +49,12 @@ if __name__ == '__main__':
     if sum('I' in x for x in fastqs.values()) != 2:
         raise ValueError(f'Must have 2 index fastqs. Found {idx_count}')
 
+    # set swabseq flag depending on input
+    if args.index_len == 8:
+        index_len = ''
+    else:
+        index_len = '10'
+
     # process out_dir
     out_dir = Path(args.out_dir)
 
@@ -51,6 +63,6 @@ if __name__ == '__main__':
     if len(fastqs) == 4:
         fastq_order.append(fastqs['R2'])
 
-    kallisto = f'kallisto bus -x SwabSeq10 --index {args.index} --threads {args.threads} --output-dir {out_dir}'
+    kallisto = f'kallisto bus -x SwabSeq{index_len} --index {args.index} --threads {args.threads} --output-dir {out_dir}'
     p = subprocess.Popen(shlex.split(kallisto) + fastq_order)
     exit_code = p.wait()
