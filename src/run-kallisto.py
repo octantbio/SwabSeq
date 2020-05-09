@@ -1,7 +1,9 @@
 import re
+import gzip
 import shlex
 import shutil
 import argparse
+import itertools
 import subprocess
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -23,12 +25,6 @@ if __name__ == '__main__':
                         required=True,
                         dest='out_dir',
                         help='path to output folder')
-    parser.add_argument('-l', '--index-len',
-                        type=int,
-                        dest='index_len',
-                        choices=[8,10],
-                        default=10,
-                        help='length of i7/i5 index (10 default)')
     parser.add_argument('-t', '--threads',
                         type=int,
                         default=1,
@@ -49,8 +45,19 @@ if __name__ == '__main__':
     if sum('I' in x for x in fastqs.values()) != 2:
         raise ValueError(f'Must have 2 index fastqs. Found {idx_count}')
 
+    # grab the index len and make sure they are the same for both files
+    with gzip.open(fastqs['I1'], 'rt') as f:
+        i1_len = len(list(itertools.islice(f, 1, 2))[0].rstrip())
+    with gzip.open(fastqs['I2'], 'rt') as f:
+        i2_len = len(list(itertools.islice(f, 1, 2))[0].rstrip())
+
+    if i1_len != i2_len:
+        raise(ValueError(f'Index 1 & 2 must be same length (either 8 or 10)\ni1 - {i1_len}\ni2 - {i2_len}'))
+    elif i1_len not in [8,10] or i2_len not in [8,10]:
+        raise(ValueError(f'Index 1 & 2 must be same length (either 8 or 10)\ni1 - {i1_len}\ni2 - {i2_len}'))
+
     # set swabseq flag depending on input
-    if args.index_len == 8:
+    if i1_len == 8:
         index_len = ''
     else:
         index_len = '10'
