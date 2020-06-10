@@ -1,0 +1,77 @@
+
+
+```{r}
+library(assertthat)
+library(magrittr)
+library(tidyverse)
+
+#------------------------------------------------------------------------------
+# test seq's pulled from benchling
+
+p5 <- toupper('aatgatacggcgaccaccgagatctacac')
+p7 <- toupper('caagcagaagacggcatacgagat')
+
+s2.p5 <- toupper('gctggtgctgcagcttatta')
+s2.p7 <- toupper('agggtcaagtgcacagtcta')
+
+rpp30.p5 <- toupper('gagcggctgtctccacaagt')
+rpp30.p7 <- toupper('agatttggacctgcgagcg')
+
+primers <- read_tsv('./frozen-data/primer-set.tsv', col_names = c('f_idx', 'f_seq', 'set', 'r_idx', 'r_seq'))
+
+#------------------------------------------------------------------------------
+# make sure no i7 match any i5 and vice versa
+assert_that(
+  {primers %>%
+      select(r_idx = f_idx) %>%
+      inner_join(primers) %>%
+      nrow()} == 0
+)
+
+assert_that(
+  {primers %>%
+      select(f_idx = r_idx) %>%
+      inner_join(primers) %>%
+      nrow()} == 0
+)
+
+#------------------------------------------------------------------------------
+# make sure p5/p7 are present
+assert_that(
+  {primers %>%
+      filter(str_detect(f_seq, p5)) %>%
+      nrow()} == nrow(primers)
+)
+
+assert_that(
+  {primers %>%
+      filter(str_detect(r_seq, p7)) %>%
+      nrow()} == nrow(primers)
+)
+
+#------------------------------------------------------------------------------
+# make sure the primers are present and oriented properly
+assert_that(
+  {primers %>%
+      filter(str_detect(f_seq, s2.p5), set == 'S2') %>%
+      nrow()} == nrow(primers) / 2
+)
+
+assert_that(
+  {primers %>%
+      filter(str_detect(r_seq, s2.p7), set == 'S2') %>%
+      nrow()} == nrow(primers) / 2
+)
+
+assert_that(
+  {primers %>%
+      filter(str_detect(f_seq, rpp30.p5), set == 'RPP30') %>%
+      nrow()} == nrow(primers) / 2
+)
+
+assert_that(
+  {primers %>%
+      filter(str_detect(r_seq, rpp30.p7), set == 'RPP30') %>%
+      nrow()} == nrow(primers) / 2
+)
+```
