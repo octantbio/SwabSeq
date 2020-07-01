@@ -219,6 +219,9 @@ if __name__ == '__main__':
     if len(index_suffixes) > 0:
         out_df = expand_samplesheet(out_df, index_suffixes)
 
+    # drop any i7/i5 combo thats an NA
+    out_df = out_df.query('i7 != "NA" & i5 != "NA"')
+
     # Check to make sure each i5/i7 combination uniquely defines a row
     duplicated_index_rows = np.where(out_df.duplicated(['i5', 'i7']))[0].tolist()
     if len(duplicated_index_rows) > 0:
