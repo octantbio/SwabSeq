@@ -115,12 +115,16 @@ pipeline/%/output.bus: pipeline/%/demux-kallisto/demux data/expected-amplicons.i
 # -------------------
 # bustools needs a whitelist of all barcodes
 # we make them by cat'ing our indicies together
-pipeline/%/whitelist.txt: data/plate-maps/%/SampleSheet.csv
+
+pipeline/%/kb-cond.csv: data/plate-maps/%/SampleSheet.csv
+	@awk '/index2/,0' $< > $@
+
+pipeline/%/whitelist.txt: pipeline/%/kb-cond.csv
 	@echo "Building bustools whitelist from $<"
-	@awk '/index2/,0' $< \
-	    | mlr --headerless-csv-output --csv \
+	@mlr --headerless-csv-output --csv \
 	    put -e '$$barcode = $$index . $$index2' \
 	    then cut -f barcode \
+	    $< \
 	    > $@
 
 # output raw kallisto counts for debugging
