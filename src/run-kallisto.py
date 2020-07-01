@@ -68,7 +68,7 @@ if __name__ == '__main__':
     # generate kallisto call
     fastq_order = [fastqs['I1'], fastqs['I2'], fastqs['R1']]
     if len(fastqs) == 4:
-        fastq_order.append(fastqs['R2'])
+        print(f'WARNING: Ignoring {fastqs["R2"]}')
 
     kallisto = f'kallisto bus -x SwabSeq{index_len} --index {args.index} --threads {args.threads} --output-dir {out_dir}'
     p = subprocess.Popen(shlex.split(kallisto) + fastq_order)
